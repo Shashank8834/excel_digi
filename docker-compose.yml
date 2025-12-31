@@ -6,7 +6,7 @@ services:
     container_name: compliance-tracker
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "7000:3000"
     volumes:
       # Persist database outside container
       - ./data:/app/src/db
