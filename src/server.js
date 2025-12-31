@@ -13,17 +13,55 @@ app.use(express.json());
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
+// Track initialization
+let isInitialized = false;
+
+// Initialize database before handling requests
+async function ensureInitialized() {
+    if (isInitialized) return;
+
+    try {
+        await initDatabase();
+        await initializeDatabase();
+        seedDemoData();
+        isInitialized = true;
+        console.log('Database initialized');
+    } catch (error) {
+        console.error('Database initialization error:', error);
+        throw error;
+    }
+}
+
+// Middleware to ensure DB is ready
+app.use(async (req, res, next) => {
+    try {
+        await ensureInitialized();
+        next();
+    } catch (error) {
+        res.status(500).json({ error: 'Database initialization failed' });
+    }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
 });
 
+// API Routes
+app.use('/api/auth', require('./routes/auth'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/teams', require('./routes/teams'));
+app.use('/api/users', require('./routes/users'));
+app.use('/api/law-groups', require('./routes/lawGroups'));
+app.use('/api/compliances', require('./routes/compliances'));
+app.use('/api/status', require('./routes/status'));
+
 // Serve index.html for all non-API routes (SPA support)
-app.get('*', (req, res, next) => {
+app.get('*', (req, res) => {
     if (!req.path.startsWith('/api')) {
         res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
     } else {
-        next();
+        res.status(404).json({ error: 'API endpoint not found' });
     }
 });
 
@@ -33,27 +71,10 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
-// Initialize database and start server
-async function startServer() {
-    try {
-        // Initialize sql.js first
-        await initDatabase();
-
-        // Then initialize schema and seed data
-        await initializeDatabase();
-        seedDemoData();
-
-        // Now load the routes (after database is ready)
-        app.use('/api/auth', require('./routes/auth'));
-        app.use('/api/clients', require('./routes/clients'));
-        app.use('/api/teams', require('./routes/teams'));
-        app.use('/api/users', require('./routes/users'));
-        app.use('/api/law-groups', require('./routes/lawGroups'));
-        app.use('/api/compliances', require('./routes/compliances'));
-        app.use('/api/status', require('./routes/status'));
-
-        app.listen(PORT, () => {
-            console.log(`
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+    app.listen(PORT, () => {
+        console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║        Compliance Work Tracker Server Started            ║
 ╠══════════════════════════════════════════════════════════╣
@@ -63,12 +84,9 @@ async function startServer() {
 ║                                                          ║
 ║  Manager can add teams, users, clients, and law groups.  ║
 ╚══════════════════════════════════════════════════════════╝
-            `);
-        });
-    } catch (error) {
-        console.error('Failed to start server:', error);
-        process.exit(1);
-    }
+        `);
+    });
 }
 
-startServer();
+// Export for Vercel serverless
+module.exports = app;
