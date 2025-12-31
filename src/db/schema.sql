@@ -1,0 +1,165 @@
+-- Compliance Work Tracker Database Schema
+
+-- Users table with roles
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK (role IN ('manager', 'team_member')),
+    team_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+
+-- Teams table
+CREATE TABLE IF NOT EXISTS teams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_by INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (created_by) REFERENCES users(id)
+);
+
+-- Clients table
+CREATE TABLE IF NOT EXISTS clients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    industry TEXT,
+    notes TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Team-Client assignments (which teams can see which clients)
+CREATE TABLE IF NOT EXISTS team_client_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id INTEGER NOT NULL,
+    client_id INTEGER NOT NULL,
+    assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    UNIQUE(team_id, client_id)
+);
+
+-- Law Groups (e.g., Income Tax, GST, ROC, PF, ESI)
+CREATE TABLE IF NOT EXISTS law_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    display_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Client-Law Group assignments (which law groups apply to which clients)
+CREATE TABLE IF NOT EXISTS client_law_group_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    law_group_id INTEGER NOT NULL,
+    assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (law_group_id) REFERENCES law_groups(id) ON DELETE CASCADE,
+    UNIQUE(client_id, law_group_id)
+);
+
+-- Compliances under Law Groups with deadline dates
+CREATE TABLE IF NOT EXISTS compliances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    law_group_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    deadline_day INTEGER, -- Day of month (1-31)
+    deadline_month INTEGER, -- Month (1-12) for yearly tasks, NULL for monthly
+    frequency TEXT NOT NULL CHECK (frequency IN ('monthly', 'quarterly', 'yearly')),
+    display_order INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (law_group_id) REFERENCES law_groups(id) ON DELETE CASCADE
+);
+
+-- Client Compliance Status tracking
+CREATE TABLE IF NOT EXISTS client_compliance_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    compliance_id INTEGER NOT NULL,
+    period_year INTEGER NOT NULL,
+    period_month INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('done', 'pending', 'na')),
+    notes TEXT,
+    updated_by INTEGER,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE,
+    FOREIGN KEY (updated_by) REFERENCES users(id),
+    UNIQUE(client_id, compliance_id, period_year, period_month)
+);
+
+-- Audit milestones (yearly audit tracks)
+CREATE TABLE IF NOT EXISTS audit_milestones (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    description TEXT,
+    default_deadline_month INTEGER,
+    default_deadline_day INTEGER,
+    display_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Client Audit Status
+CREATE TABLE IF NOT EXISTS client_audit_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    audit_milestone_id INTEGER NOT NULL,
+    fiscal_year TEXT NOT NULL, -- e.g., "2023-24"
+    status TEXT NOT NULL CHECK (status IN ('done', 'pending', 'na')),
+    completion_date DATE,
+    notes TEXT,
+    updated_by INTEGER,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (audit_milestone_id) REFERENCES audit_milestones(id) ON DELETE CASCADE,
+    FOREIGN KEY (updated_by) REFERENCES users(id),
+    UNIQUE(client_id, audit_milestone_id, fiscal_year)
+);
+
+-- Monthly client inclusion (which clients are active for which month)
+CREATE TABLE IF NOT EXISTS monthly_client_inclusion (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    team_id INTEGER,
+    period_year INTEGER NOT NULL,
+    period_month INTEGER NOT NULL,
+    is_included INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (team_id) REFERENCES teams(id),
+    UNIQUE(client_id, period_year, period_month)
+);
+
+-- Monthly compliance deadline overrides (custom deadlines per month)
+CREATE TABLE IF NOT EXISTS monthly_compliance_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    compliance_id INTEGER NOT NULL,
+    period_year INTEGER NOT NULL,
+    period_month INTEGER NOT NULL,
+    custom_deadline_day INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE,
+    UNIQUE(compliance_id, period_year, period_month)
+);
+
+-- Create indexes for performance
+CREATE INDEX IF NOT EXISTS idx_client_compliance_status_lookup 
+ON client_compliance_status(client_id, period_year, period_month);
+
+CREATE INDEX IF NOT EXISTS idx_compliances_law_group 
+ON compliances(law_group_id);
+
+CREATE INDEX IF NOT EXISTS idx_team_client_assignments_team 
+ON team_client_assignments(team_id);
+
+CREATE INDEX IF NOT EXISTS idx_users_team 
+ON users(team_id);
+
+CREATE INDEX IF NOT EXISTS idx_monthly_client_inclusion
+ON monthly_client_inclusion(period_year, period_month);
