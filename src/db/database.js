@@ -9,30 +9,23 @@ let db = null;
 
 // Initialize sql.js and create in-memory database
 async function initDatabase() {
-    const SQL = await initSqlJs();
+    try {
+        console.log('Initializing sql.js...');
+        console.log('Serverless mode:', isServerless);
 
-    // In serverless, always use in-memory database
-    if (isServerless) {
+        const SQL = await initSqlJs();
+        console.log('sql.js loaded successfully');
+
+        // Always use in-memory database for simplicity
         db = new SQL.Database();
-        console.log('Using in-memory database (serverless mode)');
-    } else {
-        // Try to load existing database for local dev
-        try {
-            if (fs.existsSync(dbPath)) {
-                const buffer = fs.readFileSync(dbPath);
-                db = new SQL.Database(buffer);
-                console.log('Loaded existing database');
-            } else {
-                db = new SQL.Database();
-                console.log('Created new database');
-            }
-        } catch (e) {
-            console.log('File system not available, using in-memory database');
-            db = new SQL.Database();
-        }
-    }
+        console.log('In-memory database created');
 
-    return db;
+        return db;
+    } catch (error) {
+        console.error('initDatabase error:', error.message);
+        console.error('Stack:', error.stack);
+        throw error;
+    }
 }
 
 // Save database to file (only works in local mode)

@@ -38,7 +38,12 @@ app.use(async (req, res, next) => {
         await ensureInitialized();
         next();
     } catch (error) {
-        res.status(500).json({ error: 'Database initialization failed' });
+        console.error('DB init middleware error:', error);
+        res.status(500).json({
+            error: 'Database initialization failed',
+            details: error.message,
+            stack: error.stack
+        });
     }
 });
 
