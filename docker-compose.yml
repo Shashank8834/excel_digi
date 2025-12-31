@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  compliance-tracker:
+    build: .
+    container_name: compliance-tracker
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    volumes:
+      # Persist database outside container
+      - ./data:/app/src/db
+    environment:
+      - NODE_ENV=production
+      - PORT=3000

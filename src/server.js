@@ -13,61 +13,9 @@ app.use(express.json());
 // Serve static files from public directory
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
-// Track initialization
-let isInitialized = false;
-
-// Initialize database before handling requests
-async function ensureInitialized() {
-    if (isInitialized) return;
-
-    try {
-        await initDatabase();
-        await initializeDatabase();
-        seedDemoData();
-        isInitialized = true;
-        console.log('Database initialized');
-    } catch (error) {
-        console.error('Database initialization error:', error);
-        throw error;
-    }
-}
-
-// Middleware to ensure DB is ready
-app.use(async (req, res, next) => {
-    try {
-        await ensureInitialized();
-        next();
-    } catch (error) {
-        console.error('DB init middleware error:', error);
-        res.status(500).json({
-            error: 'Database initialization failed',
-            details: error.message,
-            stack: error.stack
-        });
-    }
-});
-
 // Health check
 app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
-});
-
-// API Routes
-app.use('/api/auth', require('./routes/auth'));
-app.use('/api/clients', require('./routes/clients'));
-app.use('/api/teams', require('./routes/teams'));
-app.use('/api/users', require('./routes/users'));
-app.use('/api/law-groups', require('./routes/lawGroups'));
-app.use('/api/compliances', require('./routes/compliances'));
-app.use('/api/status', require('./routes/status'));
-
-// Serve index.html for all non-API routes (SPA support)
-app.get('*', (req, res) => {
-    if (!req.path.startsWith('/api')) {
-        res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
-    } else {
-        res.status(404).json({ error: 'API endpoint not found' });
-    }
 });
 
 // Error handling middleware
@@ -76,22 +24,51 @@ app.use((err, req, res, next) => {
     res.status(500).json({ error: 'Internal server error' });
 });
 
-// For local development
-if (process.env.NODE_ENV !== 'production') {
-    app.listen(PORT, () => {
-        console.log(`
+// Initialize database and start server
+async function startServer() {
+    try {
+        // Initialize sql.js first
+        await initDatabase();
+
+        // Then initialize schema and seed data
+        await initializeDatabase();
+        seedDemoData();
+
+        // Load the routes (after database is ready)
+        app.use('/api/auth', require('./routes/auth'));
+        app.use('/api/clients', require('./routes/clients'));
+        app.use('/api/teams', require('./routes/teams'));
+        app.use('/api/users', require('./routes/users'));
+        app.use('/api/law-groups', require('./routes/lawGroups'));
+        app.use('/api/compliances', require('./routes/compliances'));
+        app.use('/api/status', require('./routes/status'));
+
+        // Serve index.html for all non-API routes (SPA support)
+        app.get('*', (req, res) => {
+            if (!req.path.startsWith('/api')) {
+                res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
+            } else {
+                res.status(404).json({ error: 'API endpoint not found' });
+            }
+        });
+
+        app.listen(PORT, '0.0.0.0', () => {
+            console.log(`
 ╔══════════════════════════════════════════════════════════╗
 ║        Compliance Work Tracker Server Started            ║
 ╠══════════════════════════════════════════════════════════╣
-║  Local:   http://localhost:${PORT}                          ║
+║  Server:  http://0.0.0.0:${PORT}                            ║
 ║                                                          ║
 ║  Login:   manager@company.com / password123              ║
 ║                                                          ║
 ║  Manager can add teams, users, clients, and law groups.  ║
 ╚══════════════════════════════════════════════════════════╝
-        `);
-    });
+            `);
+        });
+    } catch (error) {
+        console.error('Failed to start server:', error);
+        process.exit(1);
+    }
 }
 
-// Export for Vercel serverless
-module.exports = app;
+startServer();

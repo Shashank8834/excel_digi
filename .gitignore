@@ -1,5 +1,7 @@
 node_modules/
 src/db/tracker.db
+data/
 .env
 .env.local
-.vercel
+*.log
+.DS_Store
