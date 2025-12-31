@@ -2,32 +2,161 @@ const initSqlJs = require('sql.js');
 const path = require('path');
 const fs = require('fs');
 
+// Check if we're on Vercel (serverless)
+const isServerless = process.env.VERCEL || process.env.AWS_LAMBDA_FUNCTION_NAME;
 const dbPath = path.join(__dirname, 'tracker.db');
 let db = null;
 
-// Initialize sql.js and load/create database
+// Initialize sql.js and create in-memory database
 async function initDatabase() {
     const SQL = await initSqlJs();
 
-    // Try to load existing database
-    if (fs.existsSync(dbPath)) {
-        const buffer = fs.readFileSync(dbPath);
-        db = new SQL.Database(buffer);
-    } else {
+    // In serverless, always use in-memory database
+    if (isServerless) {
         db = new SQL.Database();
+        console.log('Using in-memory database (serverless mode)');
+    } else {
+        // Try to load existing database for local dev
+        try {
+            if (fs.existsSync(dbPath)) {
+                const buffer = fs.readFileSync(dbPath);
+                db = new SQL.Database(buffer);
+                console.log('Loaded existing database');
+            } else {
+                db = new SQL.Database();
+                console.log('Created new database');
+            }
+        } catch (e) {
+            console.log('File system not available, using in-memory database');
+            db = new SQL.Database();
+        }
     }
 
     return db;
 }
 
-// Save database to file
+// Save database to file (only works in local mode)
 function saveDatabase() {
-    if (db) {
-        const data = db.export();
-        const buffer = Buffer.from(data);
-        fs.writeFileSync(dbPath, buffer);
+    if (db && !isServerless) {
+        try {
+            const data = db.export();
+            const buffer = Buffer.from(data);
+            fs.writeFileSync(dbPath, buffer);
+        } catch (e) {
+            // Ignore file system errors in serverless
+        }
     }
 }
+
+// Embedded schema for serverless
+const SCHEMA = `
+CREATE TABLE IF NOT EXISTS users (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    email TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    role TEXT NOT NULL CHECK(role IN ('manager', 'team_member')),
+    team_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (team_id) REFERENCES teams(id)
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS clients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    industry TEXT,
+    notes TEXT,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS team_client_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    team_id INTEGER NOT NULL,
+    client_id INTEGER NOT NULL,
+    assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    UNIQUE(team_id, client_id)
+);
+
+CREATE TABLE IF NOT EXISTS law_groups (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    description TEXT,
+    display_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS client_law_group_assignments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    law_group_id INTEGER NOT NULL,
+    assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (law_group_id) REFERENCES law_groups(id) ON DELETE CASCADE,
+    UNIQUE(client_id, law_group_id)
+);
+
+CREATE TABLE IF NOT EXISTS compliances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    law_group_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT,
+    deadline_day INTEGER NOT NULL,
+    deadline_month INTEGER,
+    frequency TEXT DEFAULT 'monthly' CHECK(frequency IN ('monthly', 'quarterly', 'yearly', 'one-time')),
+    display_order INTEGER DEFAULT 0,
+    is_active INTEGER DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (law_group_id) REFERENCES law_groups(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS client_compliance_status (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    compliance_id INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    status TEXT DEFAULT 'pending' CHECK(status IN ('pending', 'done', 'na')),
+    notes TEXT,
+    updated_by INTEGER,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE,
+    FOREIGN KEY (updated_by) REFERENCES users(id),
+    UNIQUE(client_id, compliance_id, year, month)
+);
+
+CREATE TABLE IF NOT EXISTS monthly_deadline_overrides (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    compliance_id INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    deadline_day INTEGER NOT NULL,
+    created_by INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE,
+    FOREIGN KEY (created_by) REFERENCES users(id),
+    UNIQUE(compliance_id, year, month)
+);
+
+CREATE TABLE IF NOT EXISTS active_monthly_clients (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    is_active INTEGER DEFAULT 1,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    UNIQUE(client_id, year, month)
+);
+`;
 
 // Initialize database with schema
 async function initializeDatabase() {
@@ -35,8 +164,18 @@ async function initializeDatabase() {
         await initDatabase();
     }
 
-    const schemaPath = path.join(__dirname, 'schema.sql');
-    const schema = fs.readFileSync(schemaPath, 'utf8');
+    // Use embedded schema for serverless, file for local
+    let schema;
+    if (isServerless) {
+        schema = SCHEMA;
+    } else {
+        try {
+            const schemaPath = path.join(__dirname, 'schema.sql');
+            schema = fs.readFileSync(schemaPath, 'utf8');
+        } catch (e) {
+            schema = SCHEMA;
+        }
+    }
 
     // Split by semicolon and execute each statement
     const statements = schema.split(';').filter(s => s.trim());
