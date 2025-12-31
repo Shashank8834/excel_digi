@@ -2,7 +2,8 @@ const initSqlJs = require('sql.js');
 const path = require('path');
 const fs = require('fs');
 
-const dbPath = path.join(__dirname, 'tracker.db');
+// Database stored in /app/data for Docker persistence
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'tracker.db');
 let db = null;
 
 // Initialize sql.js and load/create database

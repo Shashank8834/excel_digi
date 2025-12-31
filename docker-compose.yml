@@ -8,8 +8,8 @@ services:
     ports:
       - "7000:3000"
     volumes:
-      # Persist database outside container
-      - ./data:/app/src/db
+      # Persist database in data folder
+      - ./data:/app/data
     environment:
       - NODE_ENV=production
       - PORT=3000
