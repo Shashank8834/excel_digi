@@ -37,7 +37,6 @@ async function startServer() {
         // Load the routes (after database is ready)
         app.use('/api/auth', require('./routes/auth'));
         app.use('/api/clients', require('./routes/clients'));
-        app.use('/api/teams', require('./routes/teams'));
         app.use('/api/users', require('./routes/users'));
         app.use('/api/law-groups', require('./routes/lawGroups'));
         app.use('/api/compliances', require('./routes/compliances'));

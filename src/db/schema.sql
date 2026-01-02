@@ -6,10 +6,8 @@ CREATE TABLE IF NOT EXISTS users (
     name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('manager', 'team_member')),
-    team_id INTEGER,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (team_id) REFERENCES teams(id)
+    role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'team_member')),
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
 -- Teams table
@@ -31,15 +29,15 @@ CREATE TABLE IF NOT EXISTS clients (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Team-Client assignments (which teams can see which clients)
-CREATE TABLE IF NOT EXISTS team_client_assignments (
+-- User-Client assignments (which users can see which clients)
+CREATE TABLE IF NOT EXISTS user_client_assignments (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    team_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
     client_id INTEGER NOT NULL,
     assigned_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (team_id) REFERENCES teams(id) ON DELETE CASCADE,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
-    UNIQUE(team_id, client_id)
+    UNIQUE(user_id, client_id)
 );
 
 -- Law Groups (e.g., Income Tax, GST, ROC, PF, ESI)
@@ -126,13 +124,11 @@ CREATE TABLE IF NOT EXISTS client_audit_status (
 CREATE TABLE IF NOT EXISTS monthly_client_inclusion (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     client_id INTEGER NOT NULL,
-    team_id INTEGER,
     period_year INTEGER NOT NULL,
     period_month INTEGER NOT NULL,
     is_included INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
-    FOREIGN KEY (team_id) REFERENCES teams(id),
     UNIQUE(client_id, period_year, period_month)
 );
 
@@ -148,6 +144,15 @@ CREATE TABLE IF NOT EXISTS monthly_compliance_overrides (
     UNIQUE(compliance_id, period_year, period_month)
 );
 
+-- Default compliance extensions (persists until changed)
+CREATE TABLE IF NOT EXISTS default_compliance_extensions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    compliance_id INTEGER NOT NULL UNIQUE,
+    extension_day INTEGER NOT NULL,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE
+);
+
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_client_compliance_status_lookup 
 ON client_compliance_status(client_id, period_year, period_month);
@@ -155,11 +160,9 @@ ON client_compliance_status(client_id, period_year, period_month);
 CREATE INDEX IF NOT EXISTS idx_compliances_law_group 
 ON compliances(law_group_id);
 
-CREATE INDEX IF NOT EXISTS idx_team_client_assignments_team 
-ON team_client_assignments(team_id);
-
-CREATE INDEX IF NOT EXISTS idx_users_team 
-ON users(team_id);
+CREATE INDEX IF NOT EXISTS idx_user_client_assignments_user 
+ON user_client_assignments(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_monthly_client_inclusion
 ON monthly_client_inclusion(period_year, period_month);
+

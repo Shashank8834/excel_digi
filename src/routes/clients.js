@@ -4,20 +4,20 @@ const { authenticateToken, requireManager } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all clients (filtered by team for team members)
+// Get all clients (filtered by user assignment for team members)
 router.get('/', authenticateToken, (req, res) => {
     try {
         let clients;
 
-        if (req.user.role === 'manager') {
-            // Managers see all clients with teams and law groups
+        if (req.user.role === 'admin' || req.user.role === 'manager') {
+            // Admins/Managers see all clients with assigned users and law groups
             clients = db.prepare(`
                 SELECT c.*, 
-                    GROUP_CONCAT(DISTINCT t.name) as assigned_teams,
+                    GROUP_CONCAT(DISTINCT u.name) as assigned_users,
                     GROUP_CONCAT(DISTINCT lg.name) as assigned_law_groups
                 FROM clients c
-                LEFT JOIN team_client_assignments tca ON c.id = tca.client_id
-                LEFT JOIN teams t ON tca.team_id = t.id
+                LEFT JOIN user_client_assignments uca ON c.id = uca.client_id
+                LEFT JOIN users u ON uca.user_id = u.id
                 LEFT JOIN client_law_group_assignments clga ON c.id = clga.client_id
                 LEFT JOIN law_groups lg ON clga.law_group_id = lg.id
                 WHERE c.is_active = 1
@@ -29,10 +29,10 @@ router.get('/', authenticateToken, (req, res) => {
             clients = db.prepare(`
                 SELECT c.*
                 FROM clients c
-                INNER JOIN team_client_assignments tca ON c.id = tca.client_id
-                WHERE tca.team_id = ? AND c.is_active = 1
+                INNER JOIN user_client_assignments uca ON c.id = uca.client_id
+                WHERE uca.user_id = ? AND c.is_active = 1
                 ORDER BY c.name
-            `).all(req.user.team_id);
+            `).all(req.user.id);
         }
 
         res.json(clients);
@@ -52,24 +52,24 @@ router.get('/:id', authenticateToken, (req, res) => {
         }
 
         // Check access for team members
-        if (req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
             const hasAccess = db.prepare(`
-                SELECT 1 FROM team_client_assignments 
-                WHERE team_id = ? AND client_id = ?
-            `).get(req.user.team_id, req.params.id);
+                SELECT 1 FROM user_client_assignments 
+                WHERE user_id = ? AND client_id = ?
+            `).get(req.user.id, req.params.id);
 
             if (!hasAccess) {
                 return res.status(403).json({ error: 'Access denied' });
             }
         }
 
-        // Get assigned teams
-        const teams = db.prepare(`
-            SELECT t.id FROM teams t
-            INNER JOIN team_client_assignments tca ON t.id = tca.team_id
-            WHERE tca.client_id = ?
+        // Get assigned users
+        const users = db.prepare(`
+            SELECT u.id FROM users u
+            INNER JOIN user_client_assignments uca ON u.id = uca.user_id
+            WHERE uca.client_id = ?
         `).all(req.params.id);
-        client.team_ids = teams.map(t => t.id);
+        client.user_ids = users.map(u => u.id);
 
         // Get assigned law groups
         const lawGroups = db.prepare(`
@@ -86,10 +86,10 @@ router.get('/:id', authenticateToken, (req, res) => {
     }
 });
 
-// Create client (manager only)
+// Create client (manager/admin only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, team_ids, law_group_ids } = req.body;
+        const { name, industry, notes, user_ids, law_group_ids } = req.body;
 
         if (!name) {
             return res.status(400).json({ error: 'Client name is required' });
@@ -99,13 +99,13 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
             INSERT INTO clients (name, industry, notes) VALUES (?, ?, ?)
         `).run(name, industry, notes);
 
-        // Assign to teams if specified
-        if (team_ids && team_ids.length > 0) {
+        // Assign to users if specified
+        if (user_ids && user_ids.length > 0) {
             const insertAssignment = db.prepare(`
-                INSERT INTO team_client_assignments (team_id, client_id) VALUES (?, ?)
+                INSERT INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
             `);
-            for (const teamId of team_ids) {
-                insertAssignment.run(teamId, result.lastInsertRowid);
+            for (const userId of user_ids) {
+                insertAssignment.run(userId, result.lastInsertRowid);
             }
         }
 
@@ -129,25 +129,25 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
     }
 });
 
-// Update client (manager only)
+// Update client (manager/admin only)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, is_active, team_ids, law_group_ids } = req.body;
+        const { name, industry, notes, is_active, user_ids, law_group_ids } = req.body;
 
         db.prepare(`
             UPDATE clients SET name = ?, industry = ?, notes = ?, is_active = ?
             WHERE id = ?
         `).run(name, industry, notes, is_active ?? 1, req.params.id);
 
-        // Update team assignments if provided
-        if (team_ids !== undefined) {
-            db.prepare('DELETE FROM team_client_assignments WHERE client_id = ?').run(req.params.id);
+        // Update user assignments if provided
+        if (user_ids !== undefined) {
+            db.prepare('DELETE FROM user_client_assignments WHERE client_id = ?').run(req.params.id);
 
             const insertAssignment = db.prepare(`
-                INSERT INTO team_client_assignments (team_id, client_id) VALUES (?, ?)
+                INSERT INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
             `);
-            for (const teamId of team_ids) {
-                insertAssignment.run(teamId, req.params.id);
+            for (const userId of user_ids) {
+                insertAssignment.run(userId, req.params.id);
             }
         }
 
@@ -170,7 +170,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
     }
 });
 
-// Delete client (manager only - soft delete)
+// Delete client (manager/admin only - soft delete)
 router.delete('/:id', authenticateToken, requireManager, (req, res) => {
     try {
         db.prepare('UPDATE clients SET is_active = 0 WHERE id = ?').run(req.params.id);
@@ -182,3 +182,4 @@ router.delete('/:id', authenticateToken, requireManager, (req, res) => {
 });
 
 module.exports = router;
+

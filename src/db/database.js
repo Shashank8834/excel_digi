@@ -105,7 +105,7 @@ const dbWrapper = {
     }
 };
 
-// Seed initial data - only manager user for fresh start
+// Seed initial data - only admin user for fresh start
 function seedDemoData() {
     const bcrypt = require('bcryptjs');
 
@@ -118,13 +118,13 @@ function seedDemoData() {
         return;
     }
 
-    // Create only the manager user - password: "password123"
+    // Create only the admin user - password: "password123"
     const passwordHash = bcrypt.hashSync('password123', 10);
-    db.run('INSERT INTO users (name, email, password_hash, role, team_id) VALUES (?, ?, ?, ?, ?)',
-        ['Manager Admin', 'manager@company.com', passwordHash, 'manager', null]);
+    db.run('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
+        ['Admin', 'manager@company.com', passwordHash, 'admin']);
 
     saveDatabase();
-    console.log('Manager user created: manager@company.com / password123');
+    console.log('Admin user created: manager@company.com / password123');
 }
 
 module.exports = { db: dbWrapper, initializeDatabase, seedDemoData, initDatabase };

@@ -1,17 +1,16 @@
 const express = require('express');
 const bcrypt = require('bcryptjs');
 const { db } = require('../db/database');
-const { authenticateToken, requireManager } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, requireManager } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all users (manager only)
+// Get all users (admin/manager only)
 router.get('/', authenticateToken, requireManager, (req, res) => {
     try {
         const users = db.prepare(`
-            SELECT u.id, u.name, u.email, u.role, u.team_id, t.name as team_name, u.created_at
+            SELECT u.id, u.name, u.email, u.role, u.created_at
             FROM users u
-            LEFT JOIN teams t ON u.team_id = t.id
             ORDER BY u.name
         `).all();
 
@@ -22,10 +21,10 @@ router.get('/', authenticateToken, requireManager, (req, res) => {
     }
 });
 
-// Create user (manager only)
-router.post('/', authenticateToken, requireManager, (req, res) => {
+// Create user (admin only)
+router.post('/', authenticateToken, requireAdmin, (req, res) => {
     try {
-        const { name, email, role, team_id } = req.body;
+        const { name, email, role } = req.body;
         // Default password is 'password123' if not provided
         const password = req.body.password || 'password123';
 
@@ -33,15 +32,15 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
             return res.status(400).json({ error: 'Name, email, and role are required' });
         }
 
-        if (!['manager', 'team_member'].includes(role)) {
-            return res.status(400).json({ error: 'Role must be manager or team_member' });
+        if (!['admin', 'manager', 'team_member'].includes(role)) {
+            return res.status(400).json({ error: 'Role must be admin, manager, or team_member' });
         }
 
         const passwordHash = bcrypt.hashSync(password, 10);
 
         const result = db.prepare(`
-            INSERT INTO users (name, email, password_hash, role, team_id) VALUES (?, ?, ?, ?, ?)
-        `).run(name, email, passwordHash, role, team_id);
+            INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)
+        `).run(name, email, passwordHash, role);
 
         res.status(201).json({
             id: result.lastInsertRowid,
@@ -56,22 +55,26 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
     }
 });
 
-// Update user (manager only)
-router.put('/:id', authenticateToken, requireManager, (req, res) => {
+// Update user (admin only)
+router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
     try {
-        const { name, email, role, team_id, password } = req.body;
+        const { name, email, role, password } = req.body;
+
+        if (!['admin', 'manager', 'team_member'].includes(role)) {
+            return res.status(400).json({ error: 'Role must be admin, manager, or team_member' });
+        }
 
         if (password) {
             const passwordHash = bcrypt.hashSync(password, 10);
             db.prepare(`
-                UPDATE users SET name = ?, email = ?, role = ?, team_id = ?, password_hash = ?
+                UPDATE users SET name = ?, email = ?, role = ?, password_hash = ?
                 WHERE id = ?
-            `).run(name, email, role, team_id, passwordHash, req.params.id);
+            `).run(name, email, role, passwordHash, req.params.id);
         } else {
             db.prepare(`
-                UPDATE users SET name = ?, email = ?, role = ?, team_id = ?
+                UPDATE users SET name = ?, email = ?, role = ?
                 WHERE id = ?
-            `).run(name, email, role, team_id, req.params.id);
+            `).run(name, email, role, req.params.id);
         }
 
         res.json({ message: 'User updated successfully' });
@@ -81,14 +84,16 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
     }
 });
 
-// Delete user (manager only)
-router.delete('/:id', authenticateToken, requireManager, (req, res) => {
+// Delete user (admin only)
+router.delete('/:id', authenticateToken, requireAdmin, (req, res) => {
     try {
         // Prevent self-deletion
         if (parseInt(req.params.id) === req.user.id) {
             return res.status(400).json({ error: 'Cannot delete your own account' });
         }
 
+        // Also remove user-client assignments
+        db.prepare('DELETE FROM user_client_assignments WHERE user_id = ?').run(req.params.id);
         db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
@@ -98,3 +103,4 @@ router.delete('/:id', authenticateToken, requireManager, (req, res) => {
 });
 
 module.exports = router;
+

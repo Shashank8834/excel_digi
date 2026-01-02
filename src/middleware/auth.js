@@ -20,9 +20,17 @@ function authenticateToken(req, res, next) {
     });
 }
 
-// Middleware to require manager role
+// Middleware to require admin role
+function requireAdmin(req, res, next) {
+    if (req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Admin access required' });
+    }
+    next();
+}
+
+// Middleware to require manager or admin role
 function requireManager(req, res, next) {
-    if (req.user.role !== 'manager') {
+    if (req.user.role !== 'manager' && req.user.role !== 'admin') {
         return res.status(403).json({ error: 'Manager access required' });
     }
     next();
@@ -37,16 +45,16 @@ function canAccessClient(req, res, next) {
         return next();
     }
 
-    // Managers can access all clients
-    if (req.user.role === 'manager') {
+    // Admins and managers can access all clients
+    if (req.user.role === 'admin' || req.user.role === 'manager') {
         return next();
     }
 
     // Team members can only access their assigned clients
     const assignment = db.prepare(`
-        SELECT 1 FROM team_client_assignments 
-        WHERE team_id = ? AND client_id = ?
-    `).get(req.user.team_id, clientId);
+        SELECT 1 FROM user_client_assignments 
+        WHERE user_id = ? AND client_id = ?
+    `).get(req.user.id, clientId);
 
     if (!assignment) {
         return res.status(403).json({ error: 'You do not have access to this client' });
@@ -62,7 +70,6 @@ function generateToken(user) {
             id: user.id,
             email: user.email,
             role: user.role,
-            team_id: user.team_id,
             name: user.name
         },
         JWT_SECRET,
@@ -72,6 +79,7 @@ function generateToken(user) {
 
 module.exports = {
     authenticateToken,
+    requireAdmin,
     requireManager,
     canAccessClient,
     generateToken,

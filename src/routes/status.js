@@ -1,6 +1,6 @@
 const express = require('express');
 const { db } = require('../db/database');
-const { authenticateToken } = require('../middleware/auth');
+const { authenticateToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -11,35 +11,25 @@ router.get('/matrix', authenticateToken, (req, res) => {
         const periodYear = parseInt(year) || new Date().getFullYear();
         const periodMonth = parseInt(month) || new Date().getMonth() + 1;
 
-        // Get clients based on monthly inclusion and user role
+        // Get clients based on user role
         let clients;
-        if (req.user.role === 'manager') {
-            // Managers see clients included for this month, or all if none set yet
-            clients = db.prepare(`
-                SELECT c.id, c.name, c.industry, mci.team_id
-                FROM clients c
-                LEFT JOIN monthly_client_inclusion mci 
-                    ON c.id = mci.client_id 
-                    AND mci.period_year = ? 
-                    AND mci.period_month = ?
-                WHERE c.is_active = 1 
-                    AND (mci.is_included = 1 OR mci.is_included IS NULL)
-                ORDER BY c.name
-            `).all(periodYear, periodMonth);
-        } else {
-            // Team members see only clients assigned to their team for this month
+        if (req.user.role === 'admin' || req.user.role === 'manager') {
+            // Admins/Managers see all active clients
             clients = db.prepare(`
                 SELECT c.id, c.name, c.industry
                 FROM clients c
-                INNER JOIN monthly_client_inclusion mci 
-                    ON c.id = mci.client_id 
-                    AND mci.period_year = ? 
-                    AND mci.period_month = ?
-                WHERE mci.team_id = ? 
-                    AND mci.is_included = 1 
-                    AND c.is_active = 1
+                WHERE c.is_active = 1
                 ORDER BY c.name
-            `).all(periodYear, periodMonth, req.user.team_id);
+            `).all();
+        } else {
+            // Team members see only clients assigned to them
+            clients = db.prepare(`
+                SELECT c.id, c.name, c.industry
+                FROM clients c
+                INNER JOIN user_client_assignments uca ON c.id = uca.client_id
+                WHERE uca.user_id = ? AND c.is_active = 1
+                ORDER BY c.name
+            `).all(req.user.id);
         }
 
         // Get all active compliances grouped by law group
@@ -124,24 +114,26 @@ router.post('/update', authenticateToken, (req, res) => {
         const periodMonth = parseInt(month) || new Date().getMonth() + 1;
 
         // Check if team member has access to this client
-        if (req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
             const hasAccess = db.prepare(`
-                SELECT 1 FROM team_client_assignments 
-                WHERE team_id = ? AND client_id = ?
-            `).get(req.user.team_id, client_id);
+                SELECT 1 FROM user_client_assignments 
+                WHERE user_id = ? AND client_id = ?
+            `).get(req.user.id, client_id);
 
             if (!hasAccess) {
                 return res.status(403).json({ error: 'You do not have access to this client' });
             }
         }
 
-        // Check if period is editable (only current month or future)
+        // Check if period is editable (only current month or future) - only admin can edit all
         const now = new Date();
         const currentYear = now.getFullYear();
         const currentMonth = now.getMonth() + 1;
 
-        if (periodYear < currentYear || (periodYear === currentYear && periodMonth < currentMonth)) {
-            return res.status(403).json({ error: 'Cannot edit past months' });
+        if (req.user.role !== 'admin') {
+            if (periodYear < currentYear || (periodYear === currentYear && periodMonth < currentMonth)) {
+                return res.status(403).json({ error: 'Cannot edit past months' });
+            }
         }
 
         // First delete any existing entry
@@ -175,13 +167,13 @@ router.get('/deadlines', authenticateToken, (req, res) => {
         let clientFilter = '';
         const params = [currentYear, currentMonth];
 
-        if (req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
             clientFilter = `
                 AND c.id IN (
-                    SELECT client_id FROM team_client_assignments WHERE team_id = ?
+                    SELECT client_id FROM user_client_assignments WHERE user_id = ?
                 )
             `;
-            params.push(req.user.team_id);
+            params.push(req.user.id);
         }
 
         const pendingItems = db.prepare(`
@@ -190,7 +182,7 @@ router.get('/deadlines', authenticateToken, (req, res) => {
                 c.name as client_name,
                 comp.id as compliance_id,
                 comp.name as compliance_name,
-                comp.deadline_day,
+                COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day) as deadline_day,
                 lg.name as law_group_name,
                 COALESCE(ccs.status, 'pending') as status
             FROM clients c
@@ -201,6 +193,11 @@ router.get('/deadlines', authenticateToken, (req, res) => {
                 AND comp.id = ccs.compliance_id
                 AND ccs.period_year = ?
                 AND ccs.period_month = ?
+            LEFT JOIN default_compliance_extensions dce ON comp.id = dce.compliance_id
+            LEFT JOIN monthly_compliance_overrides mco 
+                ON comp.id = mco.compliance_id 
+                AND mco.period_year = ${currentYear}
+                AND mco.period_month = ${currentMonth}
             WHERE c.is_active = 1 
                 AND comp.is_active = 1
                 AND (comp.frequency = 'monthly' OR (comp.frequency = 'yearly' AND comp.deadline_month = ${currentMonth}))
@@ -251,9 +248,9 @@ router.get('/summary', authenticateToken, (req, res) => {
         let clientFilter = '';
         const params = [periodYear, periodMonth];
 
-        if (req.user.role !== 'manager') {
-            clientFilter = `WHERE c.id IN (SELECT client_id FROM team_client_assignments WHERE team_id = ?)`;
-            params.push(req.user.team_id);
+        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            clientFilter = `WHERE c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)`;
+            params.push(req.user.id);
         }
 
         // Get total counts
@@ -285,127 +282,121 @@ router.get('/summary', authenticateToken, (req, res) => {
     }
 });
 
-// Get monthly client inclusions
-router.get('/monthly-clients', authenticateToken, (req, res) => {
+// Get compliance extensions (admin only)
+router.get('/extensions', authenticateToken, requireAdmin, (req, res) => {
     try {
-        const { year, month } = req.query;
-        const periodYear = parseInt(year) || new Date().getFullYear();
-        const periodMonth = parseInt(month) || new Date().getMonth() + 1;
-
-        // Get all clients with their inclusion status for this month
-        const clients = db.prepare(`
-            SELECT 
-                c.id, c.name, c.industry,
-                mci.is_included,
-                mci.team_id,
-                t.name as team_name
-            FROM clients c
-            LEFT JOIN monthly_client_inclusion mci 
-                ON c.id = mci.client_id 
-                AND mci.period_year = ? 
-                AND mci.period_month = ?
-            LEFT JOIN teams t ON mci.team_id = t.id
-            WHERE c.is_active = 1
-            ORDER BY c.name
-        `).all(periodYear, periodMonth);
-
-        // Get all teams for dropdown
-        const teams = db.prepare('SELECT id, name FROM teams ORDER BY name').all();
-
-        res.json({ clients, teams, period: { year: periodYear, month: periodMonth } });
-    } catch (error) {
-        console.error('Get monthly clients error:', error);
-        res.status(500).json({ error: 'Failed to get monthly clients' });
-    }
-});
-
-// Update monthly client inclusion
-router.post('/monthly-clients', authenticateToken, (req, res) => {
-    try {
-        if (req.user.role !== 'manager') {
-            return res.status(403).json({ error: 'Only managers can update monthly client assignments' });
-        }
-
-        const { client_id, year, month, is_included, team_id } = req.body;
-        const periodYear = parseInt(year) || new Date().getFullYear();
-        const periodMonth = parseInt(month) || new Date().getMonth() + 1;
-
-        // Delete existing and insert new
-        db.prepare(`
-            DELETE FROM monthly_client_inclusion 
-            WHERE client_id = ? AND period_year = ? AND period_month = ?
-        `).run(client_id, periodYear, periodMonth);
-
-        db.prepare(`
-            INSERT INTO monthly_client_inclusion (client_id, team_id, period_year, period_month, is_included)
-            VALUES (?, ?, ?, ?, ?)
-        `).run(client_id, team_id || null, periodYear, periodMonth, is_included ? 1 : 0);
-
-        res.json({ message: 'Client updated for this month' });
-    } catch (error) {
-        console.error('Update monthly client error:', error);
-        res.status(500).json({ error: 'Failed to update monthly client' });
-    }
-});
-
-// Get monthly compliance deadlines
-router.get('/monthly-deadlines', authenticateToken, (req, res) => {
-    try {
-        const { year, month } = req.query;
-        const periodYear = parseInt(year) || new Date().getFullYear();
-        const periodMonth = parseInt(month) || new Date().getMonth() + 1;
-
         const compliances = db.prepare(`
             SELECT 
                 c.id, c.name, c.deadline_day as default_deadline,
                 lg.name as law_group_name,
-                mco.custom_deadline_day
+                dce.extension_day
             FROM compliances c
             INNER JOIN law_groups lg ON c.law_group_id = lg.id
-            LEFT JOIN monthly_compliance_overrides mco 
-                ON c.id = mco.compliance_id 
-                AND mco.period_year = ? 
-                AND mco.period_month = ?
+            LEFT JOIN default_compliance_extensions dce ON c.id = dce.compliance_id
             WHERE c.is_active = 1
             ORDER BY lg.display_order, c.display_order
-        `).all(periodYear, periodMonth);
+        `).all();
 
-        res.json({ compliances, period: { year: periodYear, month: periodMonth } });
+        res.json({ compliances });
     } catch (error) {
-        console.error('Get monthly deadlines error:', error);
-        res.status(500).json({ error: 'Failed to get monthly deadlines' });
+        console.error('Get extensions error:', error);
+        res.status(500).json({ error: 'Failed to get extensions' });
     }
 });
 
-// Update monthly compliance deadline
-router.post('/monthly-deadlines', authenticateToken, (req, res) => {
+// Update compliance extension (admin only) - persists as default
+router.post('/extensions', authenticateToken, requireAdmin, (req, res) => {
     try {
-        if (req.user.role !== 'manager') {
-            return res.status(403).json({ error: 'Only managers can update deadlines' });
+        const { compliance_id, extension_day } = req.body;
+
+        // Delete existing extension
+        db.prepare(`
+            DELETE FROM default_compliance_extensions WHERE compliance_id = ?
+        `).run(compliance_id);
+
+        // Insert new extension if provided
+        if (extension_day) {
+            db.prepare(`
+                INSERT INTO default_compliance_extensions (compliance_id, extension_day)
+                VALUES (?, ?)
+            `).run(compliance_id, parseInt(extension_day));
         }
 
-        const { compliance_id, year, month, custom_deadline_day } = req.body;
+        res.json({ message: 'Extension updated and will apply to all future months' });
+    } catch (error) {
+        console.error('Update extension error:', error);
+        res.status(500).json({ error: 'Failed to update extension' });
+    }
+});
+
+// Calendar data - get all tasks for a month with deadlines
+router.get('/calendar', authenticateToken, (req, res) => {
+    try {
+        const { year, month, client_id } = req.query;
         const periodYear = parseInt(year) || new Date().getFullYear();
         const periodMonth = parseInt(month) || new Date().getMonth() + 1;
 
-        // Delete existing and insert new
-        db.prepare(`
-            DELETE FROM monthly_compliance_overrides 
-            WHERE compliance_id = ? AND period_year = ? AND period_month = ?
-        `).run(compliance_id, periodYear, periodMonth);
+        let clientFilter = '';
+        const params = [periodYear, periodMonth, periodYear, periodMonth];
 
-        if (custom_deadline_day) {
-            db.prepare(`
-                INSERT INTO monthly_compliance_overrides (compliance_id, period_year, period_month, custom_deadline_day)
-                VALUES (?, ?, ?, ?)
-            `).run(compliance_id, periodYear, periodMonth, parseInt(custom_deadline_day));
+        // Filter by specific client if provided
+        if (client_id) {
+            clientFilter = 'AND c.id = ?';
+            params.push(parseInt(client_id));
+        } else if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+            // Team members can only see assigned clients
+            clientFilter = 'AND c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)';
+            params.push(req.user.id);
         }
 
-        res.json({ message: 'Deadline updated' });
+        const tasks = db.prepare(`
+            SELECT 
+                c.id as client_id, 
+                c.name as client_name,
+                comp.id as compliance_id,
+                comp.name as compliance_name,
+                COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day) as deadline_day,
+                lg.name as law_group_name,
+                COALESCE(ccs.status, 'pending') as status
+            FROM clients c
+            CROSS JOIN compliances comp
+            INNER JOIN law_groups lg ON comp.law_group_id = lg.id
+            LEFT JOIN client_compliance_status ccs 
+                ON c.id = ccs.client_id 
+                AND comp.id = ccs.compliance_id
+                AND ccs.period_year = ?
+                AND ccs.period_month = ?
+            LEFT JOIN default_compliance_extensions dce ON comp.id = dce.compliance_id
+            LEFT JOIN monthly_compliance_overrides mco 
+                ON comp.id = mco.compliance_id 
+                AND mco.period_year = ?
+                AND mco.period_month = ?
+            WHERE c.is_active = 1 
+                AND comp.is_active = 1
+                AND (comp.frequency = 'monthly' OR (comp.frequency = 'yearly' AND comp.deadline_month = ${periodMonth}))
+                ${clientFilter}
+            ORDER BY COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day), c.name
+        `).all(...params);
+
+        // Group by deadline day
+        const tasksByDay = {};
+        tasks.forEach(task => {
+            const day = task.deadline_day || 1;
+            if (!tasksByDay[day]) {
+                tasksByDay[day] = [];
+            }
+            tasksByDay[day].push(task);
+        });
+
+        res.json({
+            period: { year: periodYear, month: periodMonth },
+            tasksByDay
+        });
     } catch (error) {
-        console.error('Update deadline error:', error);
-        res.status(500).json({ error: 'Failed to update deadline' });
+        console.error('Get calendar error:', error);
+        res.status(500).json({ error: 'Failed to get calendar data' });
     }
 });
 
 module.exports = router;
+

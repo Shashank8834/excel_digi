@@ -3,8 +3,10 @@ let currentUser = null;
 let currentPage = 'dashboard';
 let currentMonth = new Date().getMonth() + 1;
 let currentYear = new Date().getFullYear();
+let calendarYear = new Date().getFullYear();
+let calendarMonth = new Date().getMonth() + 1;
 let cachedLawGroups = [];
-let cachedTeams = [];
+let cachedUsers = [];
 
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', async () => {
@@ -34,8 +36,11 @@ function initializeUI() {
     document.getElementById('userRole').textContent = currentUser.role.replace('_', ' ');
     document.getElementById('userAvatar').textContent = currentUser.name.charAt(0).toUpperCase();
 
-    // Show admin section for managers
-    if (currentUser.role === 'manager') {
+    // Show admin sections for admin role
+    if (currentUser.role === 'admin') {
+        document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
+        document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'block');
+    } else if (currentUser.role === 'manager') {
         document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'block');
     }
 
@@ -107,10 +112,10 @@ async function loadInitialData() {
         lawGroupSelect.innerHTML = '<option value="">All Law Groups</option>' +
             cachedLawGroups.map(lg => `<option value="${lg.id}">${lg.name}</option>`).join('');
 
-        // Load teams for admin
-        if (currentUser.role === 'manager') {
-            const teamsRes = await apiCall('/api/teams');
-            cachedTeams = teamsRes;
+        // Load users for admin
+        if (currentUser.role === 'admin' || currentUser.role === 'manager') {
+            const usersRes = await apiCall('/api/users');
+            cachedUsers = usersRes;
         }
     } catch (error) {
         showToast('Failed to load initial data', 'error');
@@ -139,8 +144,8 @@ function navigateTo(page) {
         case 'matrix':
             loadMatrix();
             break;
-        case 'deadlines':
-            loadDeadlines();
+        case 'calendar':
+            loadCalendar();
             break;
         case 'monthsetup':
             loadMonthSetup();
@@ -150,9 +155,6 @@ function navigateTo(page) {
             break;
         case 'lawgroups':
             loadLawGroups();
-            break;
-        case 'teams':
-            loadTeams();
             break;
         case 'users':
             loadUsers();
@@ -640,7 +642,7 @@ async function loadClients() {
                     <tr>
                         <th>Name</th>
                         <th>Industry</th>
-                        <th>Assigned Teams</th>
+                        <th>Assigned Users</th>
                         <th>Law Groups</th>
                         <th>Notes</th>
                         <th>Actions</th>
@@ -651,7 +653,7 @@ async function loadClients() {
                         <tr>
                             <td><strong>${escapeHtml(c.name)}</strong></td>
                             <td>${escapeHtml(c.industry || '-')}</td>
-                            <td>${escapeHtml(c.assigned_teams || 'None')}</td>
+                            <td>${escapeHtml(c.assigned_users || 'None')}</td>
                             <td>${escapeHtml(c.assigned_law_groups || 'All')}</td>
                             <td style="max-width: 200px; overflow: hidden; text-overflow: ellipsis;">${escapeHtml(c.notes || '-')}</td>
                             <td>
@@ -681,9 +683,9 @@ function showAddClientModal() {
                 <input type="text" class="form-input" name="industry" placeholder="e.g., IT/ITes, Manufacturing">
             </div>
             <div class="form-group">
-                <label class="form-label">Assign to Teams</label>
-                <select class="form-select" name="team_ids" multiple style="height: 100px;">
-                    ${cachedTeams.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                <label class="form-label">Assign to Users</label>
+                <select class="form-select" name="user_ids" multiple style="height: 100px;">
+                    ${cachedUsers.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('')}
                 </select>
                 <small style="color: var(--text-muted);">Hold Ctrl/Cmd to select multiple</small>
             </div>
@@ -707,7 +709,7 @@ function showAddClientModal() {
             name: form.name.value,
             industry: form.industry.value,
             notes: form.notes.value,
-            team_ids: Array.from(form.team_ids.selectedOptions).map(o => parseInt(o.value)),
+            user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
             law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
         };
 
@@ -740,9 +742,9 @@ async function editClient(id) {
                     <input type="text" class="form-input" name="industry" value="${escapeHtml(client.industry || '')}">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Assign to Teams</label>
-                    <select class="form-select" name="team_ids" multiple style="height: 100px;">
-                        ${cachedTeams.map(t => `<option value="${t.id}" ${client.team_ids && client.team_ids.includes(t.id) ? 'selected' : ''}>${t.name}</option>`).join('')}
+                    <label class="form-label">Assign to Users</label>
+                    <select class="form-select" name="user_ids" multiple style="height: 100px;">
+                        ${cachedUsers.map(u => `<option value="${u.id}" ${client.user_ids && client.user_ids.includes(u.id) ? 'selected' : ''}>${u.name} (${u.role})</option>`).join('')}
                     </select>
                     <small style="color: var(--text-muted);">Hold Ctrl/Cmd to select multiple</small>
                 </div>
@@ -766,7 +768,7 @@ async function editClient(id) {
                 name: form.name.value,
                 industry: form.industry.value,
                 notes: form.notes.value,
-                team_ids: Array.from(form.team_ids.selectedOptions).map(o => parseInt(o.value)),
+                user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
                 law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
             };
 
@@ -1471,97 +1473,39 @@ async function saveMonthlyClients() {
 let setupYear, setupMonth;
 
 async function loadMonthSetup() {
-    // Populate month selector if not done
-    const setupMonthEl = document.getElementById('setupMonth');
-    if (setupMonthEl.options.length === 0) {
-        populateSetupMonthSelector();
-    }
-
-    // Get selected month from selector
-    const value = setupMonthEl.value;
-    if (value) {
-        [setupYear, setupMonth] = value.split('-').map(Number);
-    } else {
-        const now = new Date();
-        setupYear = now.getFullYear();
-        setupMonth = now.getMonth() + 1;
-    }
-
     try {
-        // Load clients with their monthly settings
-        const clientData = await apiCall(`/api/status/monthly-clients?year=${setupYear}&month=${setupMonth}`);
-        // Load deadlines for this month
-        const deadlineData = await apiCall(`/api/status/monthly-deadlines?year=${setupYear}&month=${setupMonth}`);
+        // Load extensions data (admin only)
+        const extensionData = await apiCall('/api/status/extensions');
 
         document.getElementById('monthSetupContent').innerHTML = `
-            <h2 style="margin-bottom: 1rem;">Setup for ${getMonthName(setupMonth)} ${setupYear}</h2>
+            <h2 style="margin-bottom: 1rem;">Compliance Extensions</h2>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
+                Set extension days for compliances. These extensions become the default deadline for all future months until changed.
+            </p>
             
-            <!-- Clients Section -->
-            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 1.5rem; margin-bottom: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">Clients & Team Assignments</h3>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-                    Select which clients are included this month and assign them to teams.
-                </p>
-                <table class="matrix-table" style="width: 100%;">
-                    <thead>
-                        <tr>
-                            <th style="width: 60px;">Include</th>
-                            <th>Client</th>
-                            <th style="width: 200px;">Assign to Team</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        ${clientData.clients.map(c => `
-                            <tr data-client-id="${c.id}">
-                                <td style="text-align: center;">
-                                    <input type="checkbox" class="setup-client-checkbox" 
-                                           data-client-id="${c.id}" 
-                                           ${c.is_included !== 0 ? 'checked' : ''}>
-                                </td>
-                                <td>
-                                    <strong>${escapeHtml(c.name)}</strong>
-                                    <span style="color: var(--text-muted); margin-left: 0.5rem;">${escapeHtml(c.industry || '')}</span>
-                                </td>
-                                <td>
-                                    <select class="form-select setup-team-select" data-client-id="${c.id}">
-                                        <option value="">-- No Team --</option>
-                                        ${clientData.teams.map(t => `
-                                            <option value="${t.id}" ${c.team_id === t.id ? 'selected' : ''}>${escapeHtml(t.name)}</option>
-                                        `).join('')}
-                                    </select>
-                                </td>
-                            </tr>
-                        `).join('')}
-                    </tbody>
-                </table>
-            </div>
-            
-            <!-- Deadlines Section -->
+            <!-- Extensions Section -->
             <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">Custom Deadlines</h3>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-                    Set custom deadline dates for this month. Leave blank to use the default deadline.
-                </p>
+                <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">Extensions</h3>
                 <table class="matrix-table" style="width: 100%;">
                     <thead>
                         <tr>
                             <th>Compliance</th>
                             <th>Law Group</th>
-                            <th style="width: 100px;">Default</th>
-                            <th style="width: 120px;">Custom Day</th>
+                            <th style="width: 100px;">Default Deadline</th>
+                            <th style="width: 120px;">Extension Day</th>
                         </tr>
                     </thead>
                     <tbody>
-                        ${deadlineData.compliances.map(c => `
+                        ${extensionData.compliances.map(c => `
                             <tr>
                                 <td>${escapeHtml(c.name)}</td>
                                 <td style="color: var(--text-muted);">${escapeHtml(c.law_group_name)}</td>
                                 <td style="text-align: center;">${c.default_deadline || '-'}</td>
                                 <td>
-                                    <input type="number" class="form-input setup-deadline-input" 
+                                    <input type="number" class="form-input setup-extension-input" 
                                            data-compliance-id="${c.id}" 
                                            min="1" max="31" 
-                                           value="${c.custom_deadline_day || ''}"
+                                           value="${c.extension_day || ''}"
                                            placeholder="${c.default_deadline || 'Day'}"
                                            style="width: 80px; padding: 0.3rem; text-align: center;">
                                 </td>
@@ -1581,78 +1525,32 @@ async function loadMonthSetup() {
 }
 
 function populateSetupMonthSelector() {
-    const months = [
-        'January', 'February', 'March', 'April', 'May', 'June',
-        'July', 'August', 'September', 'October', 'November', 'December'
-    ];
-
-    const now = new Date();
-    const nowYear = now.getFullYear();
-    const nowMonth = now.getMonth() + 1;
-
-    const options = [];
-    // Current month and next 6 months
-    for (let i = 0; i <= 6; i++) {
-        let month = nowMonth + i;
-        let year = nowYear;
-        while (month > 12) {
-            month -= 12;
-            year += 1;
-        }
-        const label = i === 0 ? '(Current)' : i === 1 ? '(Next)' : '';
-        const selected = i === 0 ? 'selected' : '';
-        options.push(`<option value="${year}-${month}" ${selected}>${months[month - 1]} ${year} ${label}</option>`);
+    // No longer needed - extensions apply to all future months
+    // Hide the month selector element
+    const setupMonthEl = document.getElementById('setupMonth');
+    if (setupMonthEl) {
+        setupMonthEl.style.display = 'none';
     }
-
-    document.getElementById('setupMonth').innerHTML = options.join('');
-    document.getElementById('setupMonth').addEventListener('change', loadMonthSetup);
 }
 
 async function saveMonthSetup() {
     try {
-        // Save client inclusions and team assignments
-        const clientRows = document.querySelectorAll('[data-client-id]');
-        const processedClients = new Set();
-
-        for (const row of clientRows) {
-            const clientId = parseInt(row.dataset.clientId);
-            if (processedClients.has(clientId)) continue;
-            processedClients.add(clientId);
-
-            const checkbox = row.querySelector('.setup-client-checkbox');
-            const teamSelect = row.querySelector('.setup-team-select');
-            if (!checkbox || !teamSelect) continue;
-
-            await apiCall('/api/status/monthly-clients', {
-                method: 'POST',
-                body: JSON.stringify({
-                    client_id: clientId,
-                    is_included: checkbox.checked,
-                    team_id: teamSelect.value ? parseInt(teamSelect.value) : null,
-                    year: setupYear,
-                    month: setupMonth
-                })
-            });
-        }
-
-        // Save deadline overrides
-        const deadlineInputs = document.querySelectorAll('.setup-deadline-input');
-        for (const input of deadlineInputs) {
+        // Save extension overrides
+        const extensionInputs = document.querySelectorAll('.setup-extension-input');
+        for (const input of extensionInputs) {
             const complianceId = parseInt(input.dataset.complianceId);
             const value = input.value.trim();
 
-            await apiCall('/api/status/monthly-deadlines', {
+            await apiCall('/api/status/extensions', {
                 method: 'POST',
                 body: JSON.stringify({
                     compliance_id: complianceId,
-                    year: setupYear,
-                    month: setupMonth,
-                    custom_deadline_day: value ? parseInt(value) : null
+                    extension_day: value ? parseInt(value) : null
                 })
             });
         }
 
-        showToast(`Settings saved for ${getMonthName(setupMonth)} ${setupYear}!`, 'success');
+        showToast('Extensions saved! They will apply to all future months.', 'success');
     } catch (error) {
         showToast('Failed to save: ' + error.message, 'error');
     }
@@ -1786,8 +1684,195 @@ function getMonthName(month) {
     return months[month - 1] || '';
 }
 
+// ===== CALENDAR FUNCTIONS =====
+async function loadCalendar() {
+    try {
+        // Populate client filter
+        const clients = await apiCall('/api/clients');
+        const clientSelect = document.getElementById('calendarClient');
+        clientSelect.innerHTML = '<option value="">All Clients</option>' +
+            clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+
+        clientSelect.onchange = loadCalendar;
+
+        // Update month label
+        document.getElementById('calendarMonthLabel').textContent =
+            `${getMonthName(calendarMonth)} ${calendarYear}`;
+
+        const selectedClient = clientSelect.value;
+        const calendarUrl = selectedClient
+            ? `/api/status/calendar?year=${calendarYear}&month=${calendarMonth}&client_id=${selectedClient}`
+            : `/api/status/calendar?year=${calendarYear}&month=${calendarMonth}`;
+
+        const data = await apiCall(calendarUrl);
+
+        // Render calendar grid
+        renderCalendarGrid(data.tasksByDay);
+    } catch (error) {
+        console.error('Calendar load error:', error);
+        document.getElementById('calendarContent').innerHTML = `
+            <div style="text-align: center; padding: 2rem; color: var(--urgency-overdue);">
+                Failed to load calendar: ${escapeHtml(error.message)}
+            </div>
+        `;
+    }
+}
+
+function renderCalendarGrid(tasksByDay) {
+    const daysInMonth = new Date(calendarYear, calendarMonth, 0).getDate();
+    const firstDay = new Date(calendarYear, calendarMonth - 1, 1).getDay();
+    const today = new Date();
+    const isCurrentMonth = today.getFullYear() === calendarYear && today.getMonth() + 1 === calendarMonth;
+    const currentDay = today.getDate();
+
+    let html = '<div class="calendar-grid">';
+
+    // Day headers
+    const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    html += '<div class="calendar-header">';
+    dayNames.forEach(d => {
+        html += `<div class="calendar-day-name">${d}</div>`;
+    });
+    html += '</div>';
+
+    html += '<div class="calendar-body">';
+
+    // Empty cells before first day
+    for (let i = 0; i < firstDay; i++) {
+        html += '<div class="calendar-cell empty"></div>';
+    }
+
+    // Days of the month
+    for (let day = 1; day <= daysInMonth; day++) {
+        const tasks = tasksByDay[day] || [];
+        const pendingTasks = tasks.filter(t => t.status === 'pending');
+        const doneTasks = tasks.filter(t => t.status === 'done');
+        const isToday = isCurrentMonth && day === currentDay;
+        const isPast = isCurrentMonth && day < currentDay;
+
+        let cellClass = 'calendar-cell';
+        if (isToday) cellClass += ' today';
+        if (isPast && pendingTasks.length > 0) cellClass += ' has-overdue';
+        else if (pendingTasks.length > 0) cellClass += ' has-pending';
+        else if (doneTasks.length > 0) cellClass += ' has-done';
+
+        html += `<div class="${cellClass}" onclick="showDayTasks(${day}, event)">`;
+        html += `<div class="calendar-day-number">${day}</div>`;
+
+        if (tasks.length > 0) {
+            html += `<div class="calendar-task-indicator">`;
+            if (pendingTasks.length > 0) {
+                html += `<span class="pending-count">${pendingTasks.length} pending</span>`;
+            }
+            if (doneTasks.length > 0) {
+                html += `<span class="done-count">${doneTasks.length} done</span>`;
+            }
+            html += `</div>`;
+        }
+
+        html += '</div>';
+    }
+
+    html += '</div></div>';
+
+    document.getElementById('calendarContent').innerHTML = html;
+}
+
+function showDayTasks(day, event) {
+    event.stopPropagation();
+
+    // Close any existing dropdown
+    document.querySelectorAll('.day-tasks-dropdown').forEach(d => d.remove());
+
+    apiCall(`/api/status/calendar?year=${calendarYear}&month=${calendarMonth}`)
+        .then(data => {
+            const tasks = data.tasksByDay[day] || [];
+            if (tasks.length === 0) return;
+
+            const dropdown = document.createElement('div');
+            dropdown.className = 'day-tasks-dropdown';
+            dropdown.innerHTML = `
+                <div class="dropdown-header">
+                    <strong>${day} ${getMonthName(calendarMonth)} ${calendarYear}</strong>
+                    <button onclick="this.parentElement.parentElement.remove()" style="float: right; background: none; border: none; cursor: pointer;">×</button>
+                </div>
+                <div class="dropdown-content">
+                    ${tasks.map(t => `
+                        <div class="task-item status-${t.status}">
+                            <div class="task-client">${escapeHtml(t.client_name)}</div>
+                            <div class="task-name">${escapeHtml(t.compliance_name)}</div>
+                            <div class="task-lawgroup">${escapeHtml(t.law_group_name)}</div>
+                            <select class="status-select-mini" onchange="updateCalendarStatus(${t.client_id}, ${t.compliance_id}, this.value)">
+                                <option value="pending" ${t.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                <option value="done" ${t.status === 'done' ? 'selected' : ''}>Done</option>
+                                <option value="na" ${t.status === 'na' ? 'selected' : ''}>N/A</option>
+                            </select>
+                        </div>
+                    `).join('')}
+                </div>
+            `;
+
+            // Position near the clicked cell
+            const rect = event.target.closest('.calendar-cell').getBoundingClientRect();
+            dropdown.style.position = 'fixed';
+            dropdown.style.top = `${rect.bottom + 5}px`;
+            dropdown.style.left = `${Math.min(rect.left, window.innerWidth - 320)}px`;
+            dropdown.style.zIndex = '1000';
+
+            document.body.appendChild(dropdown);
+
+            // Close when clicking outside
+            setTimeout(() => {
+                document.addEventListener('click', function closeDropdown(e) {
+                    if (!dropdown.contains(e.target)) {
+                        dropdown.remove();
+                        document.removeEventListener('click', closeDropdown);
+                    }
+                });
+            }, 100);
+        });
+}
+
+async function updateCalendarStatus(clientId, complianceId, status) {
+    try {
+        await apiCall('/api/status/update', {
+            method: 'POST',
+            body: JSON.stringify({
+                client_id: clientId,
+                compliance_id: complianceId,
+                year: calendarYear,
+                month: calendarMonth,
+                status: status
+            })
+        });
+        showToast('Status updated', 'success');
+        loadCalendar();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+function prevMonth() {
+    calendarMonth--;
+    if (calendarMonth < 1) {
+        calendarMonth = 12;
+        calendarYear--;
+    }
+    loadCalendar();
+}
+
+function nextMonth() {
+    calendarMonth++;
+    if (calendarMonth > 12) {
+        calendarMonth = 1;
+        calendarYear++;
+    }
+    loadCalendar();
+}
+
 function logout() {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
     window.location.href = '/login.html';
 }
+
