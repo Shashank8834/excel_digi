@@ -463,24 +463,26 @@ router.post('/client-link', authenticateToken, requireManager, (req, res) => {
 });
 
 // ===== MONTH LOCKING =====
-// Check if a month is locked (T+1 policy)
+// Check if a month is locked (T+1 policy: current month and next month are editable)
 function isMonthLocked(year, month, db) {
     const now = new Date();
     const currentYear = now.getFullYear();
     const currentMonth = now.getMonth() + 1;
 
-    // Calculate end of T+1 period (current month + 1)
-    let unlockEndYear = currentYear;
-    let unlockEndMonth = currentMonth + 1;
-    if (unlockEndMonth > 12) {
-        unlockEndMonth = 1;
-        unlockEndYear++;
+    // Current month and next month (T+1) are always editable
+    // Only months BEFORE current month should be locked
+
+    // Calculate start of editable period (current month)
+    const requestedMonthValue = year * 12 + month;
+    const currentMonthValue = currentYear * 12 + currentMonth;
+
+    // If requested month is current month or later, it's not locked
+    if (requestedMonthValue >= currentMonthValue) {
+        return { locked: false };
     }
 
-    // Check if we're past T+1 period for the requested month
-    const isPast = (year < unlockEndYear) || (year === unlockEndYear && month < unlockEndMonth);
-
-    if (!isPast) {
+    // If requested month is the previous month (T+1 grace period), not locked
+    if (requestedMonthValue === currentMonthValue - 1) {
         return { locked: false };
     }
 

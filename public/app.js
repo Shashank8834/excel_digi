@@ -76,15 +76,25 @@ function updateMonthLabels() {
 }
 
 function changeMonth(context, direction) {
-    currentMonth += direction;
-    if (currentMonth > 12) {
-        currentMonth = 1;
-        currentYear++;
-    } else if (currentMonth < 1) {
-        currentMonth = 12;
-        currentYear--;
+    // Calculate new month
+    let newMonth = currentMonth + direction;
+    let newYear = currentYear;
+
+    if (newMonth > 12) {
+        newMonth = 1;
+        newYear++;
+    } else if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
     }
 
+    // Prevent going before Jan 2026
+    if (newYear < 2026 || (newYear === 2026 && newMonth < 1)) {
+        return; // Don't navigate
+    }
+
+    currentMonth = newMonth;
+    currentYear = newYear;
     updateMonthLabels();
 
     if (context === 'dashboard') {
@@ -467,7 +477,7 @@ async function loadMatrix() {
 
         html += '</tbody></table>';
 
-        // Add read-only notice for past months or add month lock notice
+        // Check month lock status (only show lock badge if locked)
         const lockStatus = await checkMonthLock();
 
         if (lockStatus.locked) {
@@ -475,14 +485,9 @@ async function loadMatrix() {
                 ? `<button class="month-unlock-btn" onclick="showUnlockMonthModal()">🔓 Unlock</button>`
                 : '';
             html = `<div class="month-lock-badge" style="margin-bottom: 1rem; padding: 0.75rem 1rem;">
-                    🔒 This month is locked (T+1 policy). ${lockStatus.temporary ? 'Temporarily unlocked until ' + lockStatus.unlocked_until : ''} ${unlockBtn}
+                    🔒 This month is locked. ${unlockBtn}
                 </div>` + html;
             isEditable = false;
-        } else if (!isEditable) {
-            html = `<div style="background: rgba(245, 158, 11, 0.1); border: 1px solid var(--status-pending); 
-                    border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
-                    ⚠️ This is a past month. Data is read-only.
-                </div>` + html;
         }
 
         document.getElementById('matrixContent').innerHTML = html;
