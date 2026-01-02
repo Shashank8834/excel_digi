@@ -999,6 +999,21 @@ async function editCompliance(id) {
                     <label class="form-label">Deadline Month (1-12)</label>
                     <input type="number" class="form-input" name="deadline_month" min="1" max="12" value="${compliance.deadline_month || ''}">
                 </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" name="manager_only" style="width: auto;" ${compliance.manager_only ? 'checked' : ''}>
+                        <span class="form-label" style="margin: 0;">Manager/Admin Only</span>
+                    </label>
+                    <small style="color: var(--text-muted);">Only managers and admins can update this compliance status</small>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Instruction Video URL (YouTube)</label>
+                    <input type="url" class="form-input" name="instruction_video_url" value="${escapeHtml(compliance.instruction_video_url || '')}" placeholder="e.g., https://youtube.com/watch?v=...">
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Instruction Text</label>
+                    <textarea class="form-textarea" name="instruction_text" placeholder="Step-by-step instructions..." rows="4">${escapeHtml(compliance.instruction_text || '')}</textarea>
+                </div>
             </form>
         `;
 
@@ -1010,7 +1025,10 @@ async function editCompliance(id) {
                 description: form.description.value,
                 frequency: form.frequency.value,
                 deadline_day: form.deadline_day.value ? parseInt(form.deadline_day.value) : null,
-                deadline_month: form.deadline_month.value ? parseInt(form.deadline_month.value) : null
+                deadline_month: form.deadline_month.value ? parseInt(form.deadline_month.value) : null,
+                manager_only: form.manager_only.checked,
+                instruction_video_url: form.instruction_video_url.value || null,
+                instruction_text: form.instruction_text.value || null
             };
 
             try {
@@ -1936,6 +1954,114 @@ function showInstructionManual(complianceId, complianceName) {
         .catch(err => {
             showToast('Failed to load instructions: ' + err.message, 'error');
         });
+}
+
+// ===== ONEDRIVE LINKS =====
+function showOneDriveModal(clientId, clientName) {
+    apiCall(`/api/status/client-link?client_id=${clientId}&history=true`)
+        .then(data => {
+            const links = data.links || [];
+            const currentLink = links.find(l => l.period_year === currentYear && l.period_month === currentMonth);
+
+            document.getElementById('modalTitle').textContent = `OneDrive Link: ${clientName}`;
+            document.getElementById('modalBody').innerHTML = `
+                <form id="oneDriveForm">
+                    <div class="form-group">
+                        <label class="form-label">OneDrive Link for ${getMonthName(currentMonth)} ${currentYear}</label>
+                        <input type="url" class="form-input" name="onedrive_link" 
+                               value="${escapeHtml(currentLink?.onedrive_link || '')}"
+                               placeholder="Paste OneDrive folder link here...">
+                    </div>
+                    ${links.length > 0 ? `
+                        <div class="form-group">
+                            <label class="form-label">Previous Links</label>
+                            <div style="max-height: 200px; overflow-y: auto;">
+                                ${links.map(l => `
+                                    <div style="padding: 0.5rem; border-bottom: 1px solid var(--border-color);">
+                                        <strong>${getMonthName(l.period_month)} ${l.period_year}</strong>: 
+                                        <a href="${escapeHtml(l.onedrive_link)}" target="_blank" style="color: var(--status-done);">Open Link</a>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    ` : ''}
+                </form>
+            `;
+
+            document.getElementById('modalSubmit').style.display = '';
+            document.getElementById('modalSubmit').onclick = async () => {
+                const form = document.getElementById('oneDriveForm');
+                try {
+                    await apiCall('/api/status/client-link', {
+                        method: 'POST',
+                        body: JSON.stringify({
+                            client_id: clientId,
+                            year: currentYear,
+                            month: currentMonth,
+                            onedrive_link: form.onedrive_link.value
+                        })
+                    });
+                    showToast('OneDrive link saved', 'success');
+                    closeModal();
+                    loadMatrix();
+                } catch (err) {
+                    showToast(err.message, 'error');
+                }
+            };
+            openModal();
+        });
+}
+
+// ===== MONTH LOCKING =====
+async function checkMonthLock() {
+    try {
+        const lockStatus = await apiCall(`/api/status/month-lock?year=${currentYear}&month=${currentMonth}`);
+        return lockStatus;
+    } catch (e) {
+        return { locked: false };
+    }
+}
+
+function showUnlockMonthModal() {
+    document.getElementById('modalTitle').textContent = `Unlock ${getMonthName(currentMonth)} ${currentYear}`;
+    document.getElementById('modalBody').innerHTML = `
+        <form id="unlockForm">
+            <div class="form-group">
+                <label class="form-label">Unlock Duration (hours)</label>
+                <select class="form-select" name="duration">
+                    <option value="1">1 hour</option>
+                    <option value="4">4 hours</option>
+                    <option value="8">8 hours</option>
+                    <option value="24" selected>24 hours</option>
+                    <option value="48">48 hours</option>
+                </select>
+            </div>
+            <p style="color: var(--text-muted); font-size: 0.85rem;">
+                This will temporarily unlock the month for editing. The lock will automatically re-engage after the specified duration.
+            </p>
+        </form>
+    `;
+
+    document.getElementById('modalSubmit').style.display = '';
+    document.getElementById('modalSubmit').onclick = async () => {
+        const form = document.getElementById('unlockForm');
+        try {
+            await apiCall('/api/status/unlock-month', {
+                method: 'POST',
+                body: JSON.stringify({
+                    year: currentYear,
+                    month: currentMonth,
+                    duration_hours: parseInt(form.duration.value)
+                })
+            });
+            showToast(`Month unlocked for ${form.duration.value} hours`, 'success');
+            closeModal();
+            loadMatrix();
+        } catch (err) {
+            showToast(err.message, 'error');
+        }
+    };
+    openModal();
 }
 
 function logout() {
