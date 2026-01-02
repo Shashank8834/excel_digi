@@ -403,7 +403,7 @@ async function loadMatrix() {
                     </tr>
                     <tr>
                         ${allCompliances.map(c => `
-                            <th class="compliance-header">
+                            <th class="compliance-header" onclick="showComplianceInstructions(${c.id}, '${escapeHtml(c.name)}')" style="cursor: pointer;" title="Click for instructions">
                                 <span class="compliance-name">${escapeHtml(c.name)}</span>
                                 <span class="compliance-deadline">${c.deadline_day || '-'}${c.deadline_month ? '/' + c.deadline_month : ''}</span>
                             </th>
@@ -2001,6 +2001,64 @@ function showInstructionManual(complianceId, complianceName) {
         })
         .catch(err => {
             showToast('Failed to load instructions: ' + err.message, 'error');
+        });
+}
+
+// Show compliance instructions in matrix sidebar
+function showComplianceInstructions(complianceId, complianceName) {
+    const sidebar = document.getElementById('matrixSidebar');
+
+    sidebar.innerHTML = `
+        <div class="calendar-sidebar-header">Loading...</div>
+    `;
+
+    apiCall(`/api/compliances/${complianceId}`)
+        .then(compliance => {
+            let content = `<div class="calendar-sidebar-header">${escapeHtml(complianceName)}</div>`;
+
+            if (compliance.instruction_video_url) {
+                // Convert YouTube URL to embed format
+                let videoUrl = compliance.instruction_video_url;
+                if (videoUrl.includes('youtube.com/watch')) {
+                    const videoId = videoUrl.split('v=')[1]?.split('&')[0];
+                    videoUrl = `https://www.youtube.com/embed/${videoId}`;
+                } else if (videoUrl.includes('youtu.be/')) {
+                    const videoId = videoUrl.split('youtu.be/')[1]?.split('?')[0];
+                    videoUrl = `https://www.youtube.com/embed/${videoId}`;
+                }
+
+                content += `
+                    <div class="instruction-video-container" style="margin-bottom: 1rem;">
+                        <iframe src="${videoUrl}" frameborder="0" allowfullscreen></iframe>
+                    </div>
+                `;
+            }
+
+            if (compliance.instruction_text) {
+                content += `<div class="instruction-text">${escapeHtml(compliance.instruction_text)}</div>`;
+            }
+
+            if (!compliance.instruction_video_url && !compliance.instruction_text) {
+                content += '<div class="calendar-sidebar-empty">No instructions available for this compliance.</div>';
+            }
+
+            // Add close button and deadline info
+            content += `
+                <div style="margin-top: 1rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-muted);">
+                    <strong>Deadline:</strong> Day ${compliance.deadline_day || 'Not set'}
+                    ${compliance.deadline_month ? ` / Month ${compliance.deadline_month}` : ''}
+                    <br>
+                    <strong>Frequency:</strong> ${compliance.frequency}
+                </div>
+            `;
+
+            sidebar.innerHTML = content;
+        })
+        .catch(err => {
+            sidebar.innerHTML = `
+                <div class="calendar-sidebar-header">${escapeHtml(complianceName)}</div>
+                <div class="calendar-sidebar-empty" style="color: var(--urgency-overdue);">Failed to load: ${escapeHtml(err.message)}</div>
+            `;
         });
 }
 
