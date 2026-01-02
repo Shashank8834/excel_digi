@@ -118,7 +118,11 @@
                 <header class="page-header">
                     <h1 class="page-title">Dashboard</h1>
                     <div class="header-actions">
-                        <select id="dashboardMonth" class="filter-select"></select>
+                        <button class="btn btn-icon" onclick="changeMonth('dashboard', -1)"
+                            title="Previous Month">&lt;</button>
+                        <span id="dashboardMonthLabel" style="padding: 0 1rem; font-weight: 500;">January 2025</span>
+                        <button class="btn btn-icon" onclick="changeMonth('dashboard', 1)"
+                            title="Next Month">&gt;</button>
                     </div>
                 </header>
 
@@ -150,8 +154,10 @@
 
                 <div class="filters-bar">
                     <div class="filter-group">
-                        <span class="filter-label">Month:</span>
-                        <select id="matrixMonth" class="filter-select"></select>
+                        <button class="btn btn-icon" onclick="changeMonth('matrix', -1)"
+                            title="Previous Month">&lt;</button>
+                        <span id="matrixMonthLabel" style="padding: 0 1rem; font-weight: 500;">January 2025</span>
+                        <button class="btn btn-icon" onclick="changeMonth('matrix', 1)" title="Next Month">&gt;</button>
                     </div>
                     <div class="filter-group">
                         <span class="filter-label">Law Group:</span>

@@ -51,53 +51,51 @@ function initializeUI() {
 
     // Setup month selectors
     populateMonthSelectors();
+
+    // Setup matrix filters
+    setupMatrixFilters();
 }
 
 function populateMonthSelectors() {
+    // Just update the labels - buttons handle navigation now
+    updateMonthLabels();
+}
+
+function updateMonthLabels() {
     const months = [
         'January', 'February', 'March', 'April', 'May', 'June',
         'July', 'August', 'September', 'October', 'November', 'December'
     ];
 
-    const options = [];
-    const now = new Date();
-    const nowYear = now.getFullYear();
-    const nowMonth = now.getMonth() + 1;
+    const label = `${months[currentMonth - 1]} ${currentYear}`;
+    const dashboardLabel = document.getElementById('dashboardMonthLabel');
+    const matrixLabel = document.getElementById('matrixMonthLabel');
 
-    // Current month and next 2 months only (fresh start)
-    for (let i = 0; i <= 2; i++) {
-        let month = nowMonth + i;
-        let year = nowYear;
-        if (month > 12) {
-            month -= 12;
-            year += 1;
-        }
-        const selected = i === 0 ? 'selected' : '';
-        const label = i === 0 ? '(Current)' : i === 1 ? '(Next month)' : '(+2 months)';
-        options.push(`<option value="${year}-${month}" ${selected}>${months[month - 1]} ${year} ${label}</option>`);
+    if (dashboardLabel) dashboardLabel.textContent = label;
+    if (matrixLabel) matrixLabel.textContent = label;
+}
+
+function changeMonth(context, direction) {
+    currentMonth += direction;
+    if (currentMonth > 12) {
+        currentMonth = 1;
+        currentYear++;
+    } else if (currentMonth < 1) {
+        currentMonth = 12;
+        currentYear--;
     }
 
-    const optionsHTML = options.join('');
+    updateMonthLabels();
 
-    document.getElementById('dashboardMonth').innerHTML = optionsHTML;
-    document.getElementById('matrixMonth').innerHTML = optionsHTML;
-
-    // Add change listeners
-    document.getElementById('dashboardMonth').addEventListener('change', (e) => {
-        const [year, month] = e.target.value.split('-');
-        currentYear = parseInt(year);
-        currentMonth = parseInt(month);
+    if (context === 'dashboard') {
         loadDashboard();
-    });
-
-    document.getElementById('matrixMonth').addEventListener('change', (e) => {
-        const [year, month] = e.target.value.split('-');
-        currentYear = parseInt(year);
-        currentMonth = parseInt(month);
+    } else if (context === 'matrix') {
         loadMatrix();
-    });
+    }
+}
 
-    // Matrix filters
+// Matrix filters event listeners (called from initializeUI)
+function setupMatrixFilters() {
     document.getElementById('matrixLawGroup').addEventListener('change', loadMatrix);
     document.getElementById('matrixStatus').addEventListener('change', loadMatrix);
 }
@@ -683,6 +681,10 @@ function showAddClientModal() {
                 <input type="text" class="form-input" name="industry" placeholder="e.g., IT/ITes, Manufacturing">
             </div>
             <div class="form-group">
+                <label class="form-label">Channel Email (for overdue notifications)</label>
+                <input type="email" class="form-input" name="channel_mail" placeholder="e.g., team-channel@company.com">
+            </div>
+            <div class="form-group">
                 <label class="form-label">Assign to Users</label>
                 <select class="form-select" name="user_ids" multiple style="height: 100px;">
                     ${cachedUsers.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('')}
@@ -708,6 +710,7 @@ function showAddClientModal() {
         const data = {
             name: form.name.value,
             industry: form.industry.value,
+            channel_mail: form.channel_mail.value || null,
             notes: form.notes.value,
             user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
             law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
@@ -742,6 +745,10 @@ async function editClient(id) {
                     <input type="text" class="form-input" name="industry" value="${escapeHtml(client.industry || '')}">
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Channel Email (for overdue notifications)</label>
+                    <input type="email" class="form-input" name="channel_mail" value="${escapeHtml(client.channel_mail || '')}" placeholder="e.g., team-channel@company.com">
+                </div>
+                <div class="form-group">
                     <label class="form-label">Assign to Users</label>
                     <select class="form-select" name="user_ids" multiple style="height: 100px;">
                         ${cachedUsers.map(u => `<option value="${u.id}" ${client.user_ids && client.user_ids.includes(u.id) ? 'selected' : ''}>${u.name} (${u.role})</option>`).join('')}
@@ -767,6 +774,7 @@ async function editClient(id) {
             const data = {
                 name: form.name.value,
                 industry: form.industry.value,
+                channel_mail: form.channel_mail.value || null,
                 notes: form.notes.value,
                 user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
                 law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
