@@ -449,7 +449,11 @@ async function loadMatrix() {
                     continue;
                 }
 
-                if (isEditable) {
+                // Check if client has OneDrive link for this month
+                const hasOnedriveLink = !!row.client.onedrive_link;
+                const canEdit = isEditable && hasOnedriveLink;
+
+                if (canEdit) {
                     html += `
                         <td class="status-cell ${urgencyClass}">
                             <select class="status-select status-${status.status}" 
@@ -461,9 +465,18 @@ async function loadMatrix() {
                             </select>
                         </td>
                     `;
+                } else if (isEditable && !hasOnedriveLink) {
+                    // Grayed out - needs OneDrive link
+                    html += `
+                        <td class="status-cell ${urgencyClass} compliance-disabled" title="Add OneDrive link first">
+                            <span class="status-badge status-${status.status}" style="opacity: 0.5;">
+                                ${status.status === 'done' ? 'Done' : status.status === 'na' ? 'N/A' : 'Pending'}
+                            </span>
+                        </td>
+                    `;
                 } else {
                     html += `
-                        <td class="status-cell ${urgencyClass}" title="Past months are read-only">
+                        <td class="status-cell ${urgencyClass}" title="Month is locked">
                             <span class="status-badge status-${status.status}">
                                 ${status.status === 'done' ? 'Done' : status.status === 'na' ? 'N/A' : 'Pending'}
                             </span>
@@ -1903,11 +1916,22 @@ async function updateCalendarStatus(clientId, complianceId, status) {
 }
 
 function prevMonth() {
-    calendarMonth--;
-    if (calendarMonth < 1) {
-        calendarMonth = 12;
-        calendarYear--;
+    // Calculate new month
+    let newMonth = calendarMonth - 1;
+    let newYear = calendarYear;
+
+    if (newMonth < 1) {
+        newMonth = 12;
+        newYear--;
     }
+
+    // Prevent going before Jan 2026
+    if (newYear < 2026) {
+        return;
+    }
+
+    calendarMonth = newMonth;
+    calendarYear = newYear;
     loadCalendar();
 }
 
