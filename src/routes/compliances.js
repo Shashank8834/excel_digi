@@ -56,7 +56,7 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create compliance (manager only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order } = req.body;
+        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text } = req.body;
 
         if (!law_group_id || !name || !frequency) {
             return res.status(400).json({ error: 'Law group, name, and frequency are required' });
@@ -67,9 +67,9 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         }
 
         const result = db.prepare(`
-            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order)
-            VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run(law_group_id, name, description, deadline_day, deadline_month, frequency, display_order || 0);
+            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(law_group_id, name, description, deadline_day, deadline_month, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null);
 
         res.status(201).json({
             id: result.lastInsertRowid,
@@ -84,15 +84,16 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 // Update compliance (manager only)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
-        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, is_active } = req.body;
+        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, is_active, manager_only, instruction_video_url, instruction_text } = req.body;
 
         db.prepare(`
             UPDATE compliances 
             SET law_group_id = ?, name = ?, description = ?, deadline_day = ?, 
-                deadline_month = ?, frequency = ?, display_order = ?, is_active = ?
+                deadline_month = ?, frequency = ?, display_order = ?, is_active = ?,
+                manager_only = ?, instruction_video_url = ?, instruction_text = ?
             WHERE id = ?
         `).run(law_group_id, name, description, deadline_day, deadline_month, frequency,
-            display_order || 0, is_active ?? 1, req.params.id);
+            display_order || 0, is_active ?? 1, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null, req.params.id);
 
         res.json({ message: 'Compliance updated successfully' });
     } catch (error) {

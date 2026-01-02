@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS users (
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
--- Teams table
+-- Teams table (legacy - kept for migration compatibility)
 CREATE TABLE IF NOT EXISTS teams (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     name TEXT NOT NULL UNIQUE,
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS clients (
     name TEXT NOT NULL,
     industry TEXT,
     notes TEXT,
+    channel_mail TEXT, -- Email for overdue notifications
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
@@ -69,6 +70,9 @@ CREATE TABLE IF NOT EXISTS compliances (
     deadline_day INTEGER, -- Day of month (1-31)
     deadline_month INTEGER, -- Month (1-12) for yearly tasks, NULL for monthly
     frequency TEXT NOT NULL CHECK (frequency IN ('monthly', 'quarterly', 'yearly')),
+    manager_only INTEGER DEFAULT 0, -- Only admin/manager can edit
+    instruction_video_url TEXT, -- YouTube video URL for instructions
+    instruction_text TEXT, -- Text instructions
     display_order INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -153,6 +157,29 @@ CREATE TABLE IF NOT EXISTS default_compliance_extensions (
     FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE
 );
 
+-- Client monthly OneDrive links
+CREATE TABLE IF NOT EXISTS client_monthly_links (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    period_year INTEGER NOT NULL,
+    period_month INTEGER NOT NULL,
+    onedrive_link TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    UNIQUE(client_id, period_year, period_month)
+);
+
+-- Month locks (for T+1 locking policy)
+CREATE TABLE IF NOT EXISTS month_locks (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    period_year INTEGER NOT NULL,
+    period_month INTEGER NOT NULL,
+    unlocked_until DATETIME, -- Temporarily unlocked until this time
+    unlocked_by INTEGER,
+    FOREIGN KEY (unlocked_by) REFERENCES users(id),
+    UNIQUE(period_year, period_month)
+);
+
 -- Create indexes for performance
 CREATE INDEX IF NOT EXISTS idx_client_compliance_status_lookup 
 ON client_compliance_status(client_id, period_year, period_month);
@@ -165,4 +192,7 @@ ON user_client_assignments(user_id);
 
 CREATE INDEX IF NOT EXISTS idx_monthly_client_inclusion
 ON monthly_client_inclusion(period_year, period_month);
+
+CREATE INDEX IF NOT EXISTS idx_client_monthly_links
+ON client_monthly_links(client_id, period_year, period_month);
 

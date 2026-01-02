@@ -1,6 +1,6 @@
 const express = require('express');
 const { db } = require('../db/database');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireAdmin, requireManager } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -395,6 +395,122 @@ router.get('/calendar', authenticateToken, (req, res) => {
     } catch (error) {
         console.error('Get calendar error:', error);
         res.status(500).json({ error: 'Failed to get calendar data' });
+    }
+});
+
+// ===== ONEDRIVE LINKS =====
+// Get client's OneDrive link for a month (or list previous links)
+router.get('/client-link', authenticateToken, (req, res) => {
+    try {
+        const { client_id, year, month, history } = req.query;
+
+        if (history === 'true') {
+            // Get all links for a client (for dropdown)
+            const links = db.prepare(`
+                SELECT * FROM client_monthly_links
+                WHERE client_id = ?
+                ORDER BY period_year DESC, period_month DESC
+            `).all(client_id);
+            return res.json({ links });
+        }
+
+        // Get specific month's link
+        const link = db.prepare(`
+            SELECT * FROM client_monthly_links
+            WHERE client_id = ? AND period_year = ? AND period_month = ?
+        `).get(client_id, year, month);
+
+        res.json({ link: link || null });
+    } catch (error) {
+        console.error('Get client link error:', error);
+        res.status(500).json({ error: 'Failed to get client link' });
+    }
+});
+
+// Save/update client's OneDrive link
+router.post('/client-link', authenticateToken, requireManager, (req, res) => {
+    try {
+        const { client_id, year, month, onedrive_link } = req.body;
+
+        db.prepare(`
+            INSERT INTO client_monthly_links (client_id, period_year, period_month, onedrive_link)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(client_id, period_year, period_month)
+            DO UPDATE SET onedrive_link = ?, created_at = CURRENT_TIMESTAMP
+        `).run(client_id, year, month, onedrive_link, onedrive_link);
+
+        res.json({ message: 'OneDrive link saved' });
+    } catch (error) {
+        console.error('Save client link error:', error);
+        res.status(500).json({ error: 'Failed to save client link' });
+    }
+});
+
+// ===== MONTH LOCKING =====
+// Check if a month is locked (T+1 policy)
+function isMonthLocked(year, month, db) {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    // Calculate end of T+1 period (current month + 1)
+    let unlockEndYear = currentYear;
+    let unlockEndMonth = currentMonth + 1;
+    if (unlockEndMonth > 12) {
+        unlockEndMonth = 1;
+        unlockEndYear++;
+    }
+
+    // Check if we're past T+1 period for the requested month
+    const isPast = (year < unlockEndYear) || (year === unlockEndYear && month < unlockEndMonth);
+
+    if (!isPast) {
+        return { locked: false };
+    }
+
+    // Check for admin unlock
+    const unlock = db.prepare(`
+        SELECT * FROM month_locks
+        WHERE period_year = ? AND period_month = ?
+        AND unlocked_until > datetime('now')
+    `).get(year, month);
+
+    if (unlock) {
+        return { locked: false, temporary: true, unlocked_until: unlock.unlocked_until };
+    }
+
+    return { locked: true };
+}
+
+// Get month lock status
+router.get('/month-lock', authenticateToken, (req, res) => {
+    try {
+        const { year, month } = req.query;
+        const lockStatus = isMonthLocked(parseInt(year), parseInt(month), db);
+        res.json(lockStatus);
+    } catch (error) {
+        console.error('Get month lock error:', error);
+        res.status(500).json({ error: 'Failed to get month lock status' });
+    }
+});
+
+// Admin unlock a month temporarily
+router.post('/unlock-month', authenticateToken, requireAdmin, (req, res) => {
+    try {
+        const { year, month, duration_hours } = req.body;
+        const hours = duration_hours || 24;
+
+        db.prepare(`
+            INSERT INTO month_locks (period_year, period_month, unlocked_until, unlocked_by)
+            VALUES (?, ?, datetime('now', '+' || ? || ' hours'), ?)
+            ON CONFLICT(period_year, period_month)
+            DO UPDATE SET unlocked_until = datetime('now', '+' || ? || ' hours'), unlocked_by = ?
+        `).run(year, month, hours, req.user.id, hours, req.user.id);
+
+        res.json({ message: `Month unlocked for ${hours} hours` });
+    } catch (error) {
+        console.error('Unlock month error:', error);
+        res.status(500).json({ error: 'Failed to unlock month' });
     }
 });
 

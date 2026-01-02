@@ -89,15 +89,15 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create client (manager/admin only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, user_ids, law_group_ids } = req.body;
+        const { name, industry, notes, channel_mail, user_ids, law_group_ids } = req.body;
 
         if (!name) {
             return res.status(400).json({ error: 'Client name is required' });
         }
 
         const result = db.prepare(`
-            INSERT INTO clients (name, industry, notes) VALUES (?, ?, ?)
-        `).run(name, industry, notes);
+            INSERT INTO clients (name, industry, notes, channel_mail) VALUES (?, ?, ?, ?)
+        `).run(name, industry, notes, channel_mail || null);
 
         // Assign to users if specified
         if (user_ids && user_ids.length > 0) {
@@ -132,12 +132,12 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 // Update client (manager/admin only)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, is_active, user_ids, law_group_ids } = req.body;
+        const { name, industry, notes, channel_mail, is_active, user_ids, law_group_ids } = req.body;
 
         db.prepare(`
-            UPDATE clients SET name = ?, industry = ?, notes = ?, is_active = ?
+            UPDATE clients SET name = ?, industry = ?, notes = ?, channel_mail = ?, is_active = ?
             WHERE id = ?
-        `).run(name, industry, notes, is_active ?? 1, req.params.id);
+        `).run(name, industry, notes, channel_mail || null, is_active ?? 1, req.params.id);
 
         // Update user assignments if provided
         if (user_ids !== undefined) {
