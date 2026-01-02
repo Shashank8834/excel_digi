@@ -378,7 +378,7 @@ async function loadMatrix() {
 
         // Check if current month is editable
         const now = new Date();
-        const isEditable = currentYear > now.getFullYear() ||
+        let isEditable = currentYear > now.getFullYear() ||
             (currentYear === now.getFullYear() && currentMonth >= now.getMonth() + 1);
 
         // Build table
