@@ -53,13 +53,10 @@ async function migrate() {
         `);
 
         // 3. Migrate team_client_assignments to user_client_assignments
-        // For each team-client assignment, create user-client assignments for all users in that team
         console.log('3. Migrating team-client assignments to user-client assignments...');
 
-        // Check if team_client_assignments exists
         const tcaExists = db.exec("SELECT name FROM sqlite_master WHERE type='table' AND name='team_client_assignments'");
         if (tcaExists.length > 0 && tcaExists[0].values.length > 0) {
-            // Get all team-client assignments
             const teamAssignments = db.exec(`
                 SELECT tca.team_id, tca.client_id, u.id as user_id
                 FROM team_client_assignments tca
@@ -71,13 +68,8 @@ async function migrate() {
                     const userId = row[2];
                     const clientId = row[1];
                     try {
-                        db.run(`
-                            INSERT OR IGNORE INTO user_client_assignments (user_id, client_id)
-                            VALUES (?, ?)
-                        `, [userId, clientId]);
-                    } catch (e) {
-                        // Ignore duplicates
-                    }
+                        db.run(`INSERT OR IGNORE INTO user_client_assignments (user_id, client_id) VALUES (?, ?)`, [userId, clientId]);
+                    } catch (e) { }
                 }
                 console.log(`   Migrated ${teamAssignments[0].values.length} assignments`);
             } else {
@@ -87,12 +79,38 @@ async function migrate() {
             console.log('   team_client_assignments table not found, skipping...');
         }
 
-        // 4. Update first manager user to admin role
-        console.log('4. Updating first manager to admin role...');
+        // 4. Recreate users table with new role constraint (SQLite limitation)
+        console.log('4. Updating users table to support admin role...');
+
+        // Create new table with updated constraint
+        db.run(`
+            CREATE TABLE IF NOT EXISTS users_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'team_member')),
+                team_id INTEGER,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Copy data from old table
+        db.run(`
+            INSERT INTO users_new (id, name, email, password_hash, role, team_id, created_at)
+            SELECT id, name, email, password_hash, role, team_id, created_at FROM users
+        `);
+
+        // Drop old table and rename new
+        db.run(`DROP TABLE users`);
+        db.run(`ALTER TABLE users_new RENAME TO users`);
+
+        // 5. Update first manager user to admin role
+        console.log('5. Updating first manager to admin role...');
         db.run(`UPDATE users SET role = 'admin' WHERE role = 'manager' AND id = (SELECT MIN(id) FROM users WHERE role = 'manager')`);
 
-        // 5. Create new index
-        console.log('5. Creating new index...');
+        // 6. Create new index
+        console.log('6. Creating new index...');
         db.run(`CREATE INDEX IF NOT EXISTS idx_user_client_assignments_user ON user_client_assignments(user_id)`);
 
         // Save the database
