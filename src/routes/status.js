@@ -61,8 +61,23 @@ router.get('/matrix', authenticateToken, (req, res) => {
             statusMap[`${entry.client_id}-${entry.compliance_id}`] = entry;
         });
 
+        // Get OneDrive links for this period
+        const onedriveLinks = db.prepare(`
+            SELECT client_id, onedrive_link 
+            FROM client_monthly_links 
+            WHERE period_year = ? AND period_month = ?
+        `).all(periodYear, periodMonth);
+
+        const onedriveLinkMap = {};
+        onedriveLinks.forEach(link => {
+            onedriveLinkMap[link.client_id] = link.onedrive_link;
+        });
+
         // Build the matrix data
         const matrix = clients.map(client => {
+            // Add OneDrive link to client object
+            client.onedrive_link = onedriveLinkMap[client.id] || null;
+
             const row = {
                 client,
                 statuses: {}

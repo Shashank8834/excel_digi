@@ -415,8 +415,17 @@ async function loadMatrix() {
             html += `
                 <tr>
                     <td class="client-cell">
-                        <span class="client-name">${escapeHtml(row.client.name)}</span>
-                        <span class="client-industry">${escapeHtml(row.client.industry || '')}</span>
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div>
+                                <span class="client-name">${escapeHtml(row.client.name)}</span>
+                                <span class="client-industry">${escapeHtml(row.client.industry || '')}</span>
+                            </div>
+                            <button class="onedrive-link-btn ${row.client.onedrive_link ? 'has-link' : ''}" 
+                                    onclick="showOneDriveModal(${row.client.id}, '${escapeHtml(row.client.name)}')" 
+                                    title="${row.client.onedrive_link ? 'View/Edit OneDrive Link' : 'Add OneDrive Link'}">
+                                📁
+                            </button>
+                        </div>
                     </td>
             `;
 
@@ -458,8 +467,18 @@ async function loadMatrix() {
 
         html += '</tbody></table>';
 
-        // Add read-only notice for past months
-        if (!isEditable) {
+        // Add read-only notice for past months or add month lock notice
+        const lockStatus = await checkMonthLock();
+
+        if (lockStatus.locked) {
+            const unlockBtn = currentUser.role === 'admin'
+                ? `<button class="month-unlock-btn" onclick="showUnlockMonthModal()">🔓 Unlock</button>`
+                : '';
+            html = `<div class="month-lock-badge" style="margin-bottom: 1rem; padding: 0.75rem 1rem;">
+                    🔒 This month is locked (T+1 policy). ${lockStatus.temporary ? 'Temporarily unlocked until ' + lockStatus.unlocked_until : ''} ${unlockBtn}
+                </div>` + html;
+            isEditable = false;
+        } else if (!isEditable) {
             html = `<div style="background: rgba(245, 158, 11, 0.1); border: 1px solid var(--status-pending); 
                     border-radius: var(--radius-sm); padding: 0.75rem 1rem; margin-bottom: 1rem; font-size: 0.9rem;">
                     ⚠️ This is a past month. Data is read-only.
