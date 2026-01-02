@@ -1262,13 +1262,7 @@ function showAddUserModal() {
                 <select class="form-select" name="role" required>
                     <option value="team_member">Team Member</option>
                     <option value="manager">Manager</option>
-                </select>
-            </div>
-            <div class="form-group">
-                <label class="form-label">Assign to Team</label>
-                <select class="form-select" name="team_id">
-                    <option value="">No Team</option>
-                    ${cachedTeams.map(t => `<option value="${t.id}">${t.name}</option>`).join('')}
+                    <option value="admin">Admin</option>
                 </select>
             </div>
         </form>
@@ -1279,10 +1273,8 @@ function showAddUserModal() {
         const data = {
             name: form.name.value,
             email: form.email.value,
-            role: form.role.value,
-            team_id: form.team_id.value ? parseInt(form.team_id.value) : null
+            role: form.role.value
         };
-        // Only include password if provided
         if (form.password.value) {
             data.password = form.password.value;
         }
@@ -1325,13 +1317,7 @@ async function editUser(id) {
                     <select class="form-select" name="role" required>
                         <option value="team_member" ${user.role === 'team_member' ? 'selected' : ''}>Team Member</option>
                         <option value="manager" ${user.role === 'manager' ? 'selected' : ''}>Manager</option>
-                    </select>
-                </div>
-                <div class="form-group">
-                    <label class="form-label">Assign to Team</label>
-                    <select class="form-select" name="team_id">
-                        <option value="">No Team</option>
-                        ${cachedTeams.map(t => `<option value="${t.id}" ${user.team_id === t.id ? 'selected' : ''}>${t.name}</option>`).join('')}
+                        <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
                     </select>
                 </div>
             </form>
@@ -1342,8 +1328,7 @@ async function editUser(id) {
             const data = {
                 name: form.name.value,
                 email: form.email.value,
-                role: form.role.value,
-                team_id: form.team_id.value ? parseInt(form.team_id.value) : null
+                role: form.role.value
             };
 
             if (form.password.value) {
