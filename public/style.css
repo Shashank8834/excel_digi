@@ -1214,3 +1214,198 @@ body {
         font-size: 0.55rem;
     }
 }
+
+/* ===== CALENDAR SIDEBAR ===== */
+.calendar-layout {
+    display: flex;
+    gap: 1rem;
+}
+
+.calendar-main {
+    flex: 1;
+}
+
+.calendar-sidebar {
+    width: 350px;
+    background: var(--bg-secondary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-md);
+    padding: 1rem;
+    max-height: 600px;
+    overflow-y: auto;
+    position: sticky;
+    top: 1rem;
+}
+
+.calendar-sidebar-header {
+    font-weight: 600;
+    font-size: 1.1rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.calendar-sidebar-empty {
+    text-align: center;
+    color: var(--text-muted);
+    padding: 2rem;
+}
+
+.calendar-task-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 0.75rem;
+    margin-bottom: 0.5rem;
+}
+
+.calendar-task-item.overdue {
+    border-left: 3px solid var(--urgency-overdue);
+}
+
+.calendar-task-item.pending {
+    border-left: 3px solid var(--status-pending);
+}
+
+.calendar-task-item.done {
+    border-left: 3px solid var(--status-done);
+}
+
+.calendar-task-client {
+    font-weight: 500;
+    margin-bottom: 0.25rem;
+}
+
+.calendar-task-name {
+    font-size: 0.85rem;
+    color: var(--text-secondary);
+}
+
+.calendar-task-actions {
+    margin-top: 0.5rem;
+    display: flex;
+    gap: 0.5rem;
+}
+
+/* ===== MANAGER-ONLY DISABLED STYLING ===== */
+.compliance-disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.compliance-disabled .status-select {
+    cursor: not-allowed;
+}
+
+.compliance-manager-badge {
+    font-size: 0.6rem;
+    background: rgba(255, 255, 255, 0.1);
+    padding: 0.1rem 0.3rem;
+    border-radius: 2px;
+    margin-left: 0.25rem;
+}
+
+/* ===== MONTH LOCK INDICATORS ===== */
+.month-lock-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    background: rgba(239, 68, 68, 0.15);
+    color: var(--urgency-overdue);
+    padding: 0.25rem 0.5rem;
+    border-radius: var(--radius-sm);
+    font-size: 0.75rem;
+    margin-left: 0.5rem;
+}
+
+.month-unlock-btn {
+    background: transparent;
+    border: 1px solid var(--urgency-overdue);
+    color: var(--urgency-overdue);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: var(--transition-fast);
+}
+
+.month-unlock-btn:hover {
+    background: rgba(239, 68, 68, 0.1);
+}
+
+/* ===== ONEDRIVE LINK STYLING ===== */
+.onedrive-link-btn {
+    background: transparent;
+    border: 1px solid var(--border-color);
+    color: var(--text-secondary);
+    padding: 0.25rem 0.5rem;
+    font-size: 0.7rem;
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    transition: var(--transition-fast);
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+}
+
+.onedrive-link-btn:hover {
+    background: var(--bg-hover);
+    color: var(--text-primary);
+}
+
+.onedrive-link-btn.has-link {
+    color: var(--status-done);
+    border-color: var(--status-done);
+}
+
+.onedrive-missing-warning {
+    background: rgba(239, 68, 68, 0.1);
+    border: 1px solid var(--urgency-overdue);
+    border-radius: var(--radius-sm);
+    padding: 0.5rem 0.75rem;
+    margin-bottom: 1rem;
+    font-size: 0.85rem;
+    color: var(--urgency-overdue);
+}
+
+/* ===== INSTRUCTION MODAL ===== */
+.instruction-video-container {
+    position: relative;
+    width: 100%;
+    padding-bottom: 56.25%;
+    margin-bottom: 1rem;
+    background: #000;
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+}
+
+.instruction-video-container iframe {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+}
+
+.instruction-text {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    white-space: pre-wrap;
+    font-size: 0.9rem;
+    line-height: 1.6;
+}
+
+/* ===== OVERDUE STRONGER STYLING ===== */
+.status-cell.urgency-overdue .status-select,
+.status-cell.urgency-overdue .status-badge {
+    border: 2px solid var(--urgency-overdue);
+    box-shadow: 0 0 8px rgba(239, 68, 68, 0.3);
+}
+
+@media (max-width: 768px) {
+    .calendar-sidebar {
+        display: none;
+    }
+}

@@ -1,10 +1,10 @@
 // ===== GLOBAL STATE =====
 let currentUser = null;
 let currentPage = 'dashboard';
-let currentMonth = new Date().getMonth() + 1;
-let currentYear = new Date().getFullYear();
-let calendarYear = new Date().getFullYear();
-let calendarMonth = new Date().getMonth() + 1;
+let currentMonth = 1; // Start from January 2026
+let currentYear = 2026;
+let calendarYear = 2026;
+let calendarMonth = 1;
 let cachedLawGroups = [];
 let cachedUsers = [];
 
@@ -923,6 +923,21 @@ function addCompliance(lawGroupId, lawGroupName) {
                 <label class="form-label">Deadline Month (1-12, for yearly compliances)</label>
                 <input type="number" class="form-input" name="deadline_month" min="1" max="12" placeholder="e.g., 3 for March">
             </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="manager_only" style="width: auto;">
+                    <span class="form-label" style="margin: 0;">Manager/Admin Only</span>
+                </label>
+                <small style="color: var(--text-muted);">Only managers and admins can update this compliance status</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Instruction Video URL (YouTube)</label>
+                <input type="url" class="form-input" name="instruction_video_url" placeholder="e.g., https://youtube.com/watch?v=...">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Instruction Text</label>
+                <textarea class="form-textarea" name="instruction_text" placeholder="Step-by-step instructions..." rows="4"></textarea>
+            </div>
         </form>
     `;
 
@@ -934,7 +949,10 @@ function addCompliance(lawGroupId, lawGroupName) {
             description: form.description.value,
             frequency: form.frequency.value,
             deadline_day: form.deadline_day.value ? parseInt(form.deadline_day.value) : null,
-            deadline_month: form.deadline_month.value ? parseInt(form.deadline_month.value) : null
+            deadline_month: form.deadline_month.value ? parseInt(form.deadline_month.value) : null,
+            manager_only: form.manager_only.checked,
+            instruction_video_url: form.instruction_video_url.value || null,
+            instruction_text: form.instruction_text.value || null
         };
 
         try {
@@ -1774,55 +1792,52 @@ function renderCalendarGrid(tasksByDay) {
 function showDayTasks(day, event) {
     event.stopPropagation();
 
-    // Close any existing dropdown
-    document.querySelectorAll('.day-tasks-dropdown').forEach(d => d.remove());
+    // Highlight selected day
+    document.querySelectorAll('.calendar-cell').forEach(c => c.classList.remove('selected'));
+    event.target.closest('.calendar-cell').classList.add('selected');
 
     apiCall(`/api/status/calendar?year=${calendarYear}&month=${calendarMonth}`)
         .then(data => {
             const tasks = data.tasksByDay[day] || [];
-            if (tasks.length === 0) return;
+            const sidebar = document.getElementById('calendarSidebar');
 
-            const dropdown = document.createElement('div');
-            dropdown.className = 'day-tasks-dropdown';
-            dropdown.innerHTML = `
-                <div class="dropdown-header">
-                    <strong>${day} ${getMonthName(calendarMonth)} ${calendarYear}</strong>
-                    <button onclick="this.parentElement.parentElement.remove()" style="float: right; background: none; border: none; cursor: pointer;">×</button>
-                </div>
-                <div class="dropdown-content">
-                    ${tasks.map(t => `
-                        <div class="task-item status-${t.status}">
-                            <div class="task-client">${escapeHtml(t.client_name)}</div>
-                            <div class="task-name">${escapeHtml(t.compliance_name)}</div>
-                            <div class="task-lawgroup">${escapeHtml(t.law_group_name)}</div>
-                            <select class="status-select-mini" onchange="updateCalendarStatus(${t.client_id}, ${t.compliance_id}, this.value)">
-                                <option value="pending" ${t.status === 'pending' ? 'selected' : ''}>Pending</option>
-                                <option value="done" ${t.status === 'done' ? 'selected' : ''}>Done</option>
-                                <option value="na" ${t.status === 'na' ? 'selected' : ''}>N/A</option>
-                            </select>
+            const today = new Date();
+            const isOverdue = (task) => {
+                if (task.status !== 'pending') return false;
+                const deadlineDate = new Date(calendarYear, calendarMonth - 1, task.deadline_day);
+                return today > deadlineDate;
+            };
+
+            if (tasks.length === 0) {
+                sidebar.innerHTML = `
+                    <div class="calendar-sidebar-header">${day} ${getMonthName(calendarMonth)} ${calendarYear}</div>
+                    <div class="calendar-sidebar-empty">No tasks on this day</div>
+                `;
+                return;
+            }
+
+            sidebar.innerHTML = `
+                <div class="calendar-sidebar-header">${day} ${getMonthName(calendarMonth)} ${calendarYear} (${tasks.length} tasks)</div>
+                ${tasks.map(t => {
+                const overdueClass = isOverdue(t) ? 'overdue' : t.status;
+                return `
+                        <div class="calendar-task-item ${overdueClass}">
+                            <div class="calendar-task-client">${escapeHtml(t.client_name)}</div>
+                            <div class="calendar-task-name">${escapeHtml(t.compliance_name)} (${escapeHtml(t.law_group_name)})</div>
+                            <div class="calendar-task-actions">
+                                <select class="status-select status-${t.status}" onchange="updateCalendarStatus(${t.client_id}, ${t.compliance_id}, this.value)">
+                                    <option value="pending" ${t.status === 'pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="done" ${t.status === 'done' ? 'selected' : ''}>Done</option>
+                                    <option value="na" ${t.status === 'na' ? 'selected' : ''}>N/A</option>
+                                </select>
+                                ${t.channel_mail && t.status === 'pending' && isOverdue(t) ?
+                        `<button class="btn btn-icon" onclick="sendOverdueEmail('${escapeHtml(t.channel_mail)}', '${escapeHtml(t.client_name)}', '${escapeHtml(t.compliance_name)}')" title="Send overdue email">📧</button>`
+                        : ''}
+                            </div>
                         </div>
-                    `).join('')}
-                </div>
+                    `;
+            }).join('')}
             `;
-
-            // Position near the clicked cell
-            const rect = event.target.closest('.calendar-cell').getBoundingClientRect();
-            dropdown.style.position = 'fixed';
-            dropdown.style.top = `${rect.bottom + 5}px`;
-            dropdown.style.left = `${Math.min(rect.left, window.innerWidth - 320)}px`;
-            dropdown.style.zIndex = '1000';
-
-            document.body.appendChild(dropdown);
-
-            // Close when clicking outside
-            setTimeout(() => {
-                document.addEventListener('click', function closeDropdown(e) {
-                    if (!dropdown.contains(e.target)) {
-                        dropdown.remove();
-                        document.removeEventListener('click', closeDropdown);
-                    }
-                });
-            }, 100);
         });
 }
 
@@ -1861,6 +1876,66 @@ function nextMonth() {
         calendarYear++;
     }
     loadCalendar();
+}
+
+// Send overdue email via mailto link
+function sendOverdueEmail(channelMail, clientName, complianceName) {
+    const subject = encodeURIComponent(`Overdue Compliance: ${complianceName} for ${clientName}`);
+    const body = encodeURIComponent(`Dear Team,
+
+This is a reminder that the following compliance is overdue:
+
+Client: ${clientName}
+Compliance: ${complianceName}
+Period: ${getMonthName(calendarMonth)} ${calendarYear}
+
+Please address this at your earliest convenience.
+
+Best regards`);
+
+    window.open(`mailto:${channelMail}?subject=${subject}&body=${body}`, '_blank');
+}
+
+// Show instruction manual modal for a compliance
+function showInstructionManual(complianceId, complianceName) {
+    apiCall(`/api/compliances/${complianceId}`)
+        .then(compliance => {
+            let content = '';
+
+            if (compliance.instruction_video_url) {
+                // Convert YouTube URL to embed format
+                let videoUrl = compliance.instruction_video_url;
+                if (videoUrl.includes('youtube.com/watch')) {
+                    const videoId = videoUrl.split('v=')[1]?.split('&')[0];
+                    videoUrl = `https://www.youtube.com/embed/${videoId}`;
+                } else if (videoUrl.includes('youtu.be/')) {
+                    const videoId = videoUrl.split('youtu.be/')[1]?.split('?')[0];
+                    videoUrl = `https://www.youtube.com/embed/${videoId}`;
+                }
+
+                content += `
+                    <div class="instruction-video-container">
+                        <iframe src="${videoUrl}" frameborder="0" allowfullscreen></iframe>
+                    </div>
+                `;
+            }
+
+            if (compliance.instruction_text) {
+                content += `<div class="instruction-text">${escapeHtml(compliance.instruction_text)}</div>`;
+            }
+
+            if (!compliance.instruction_video_url && !compliance.instruction_text) {
+                content = '<p style="color: var(--text-muted);">No instructions available for this compliance.</p>';
+            }
+
+            document.getElementById('modalTitle').textContent = `Instructions: ${complianceName}`;
+            document.getElementById('modalBody').innerHTML = content;
+            document.getElementById('modalSubmit').style.display = 'none';
+            openModal();
+        })
+        .catch(err => {
+            showToast('Failed to load instructions: ' + err.message, 'error');
+        });
 }
 
 function logout() {
