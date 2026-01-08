@@ -96,6 +96,8 @@ router.get('/sentiment/:clientId', authenticateToken, async (req, res) => {
         }
 
         // Get daily aggregated sentiment data
+        // Match on sender_domain or any part containing the domain
+        const domainPattern = `%${client.email_domain}%`;
         const result = await pgClient.query(`
             SELECT 
                 DATE(received_dt) as date,
@@ -105,11 +107,13 @@ router.get('/sentiment/:clientId', authenticateToken, async (req, res) => {
                 SUM(CASE WHEN final_label = 'Positive' THEN 1 ELSE 0 END) as positive_count,
                 AVG(prob_neg) as avg_negative_prob
             FROM processed
-            WHERE sender_domain = $1 OR sender_domain LIKE $2
+            WHERE sender_domain ILIKE $1 
+               OR sender_email ILIKE $1
+               OR COALESCE(recipients, '') ILIKE $1
             GROUP BY DATE(received_dt)
             ORDER BY date DESC
             LIMIT 365
-        `, [client.email_domain, `%${client.email_domain}`]);
+        `, [domainPattern]);
 
         res.json({
             hasData: result.rows.length > 0,
@@ -230,6 +234,7 @@ router.get('/correlation/:clientId', authenticateToken, async (req, res) => {
                 }
 
                 // Get monthly sentiment aggregates
+                const domainPattern = `%${client.email_domain}%`;
                 const sentimentResult = await pgClient.query(`
                     SELECT 
                         EXTRACT(YEAR FROM received_dt)::integer as year,
@@ -238,10 +243,12 @@ router.get('/correlation/:clientId', authenticateToken, async (req, res) => {
                         SUM(CASE WHEN final_label = 'Negative' THEN 1 ELSE 0 END) as negative_count,
                         AVG(prob_neg) as avg_negative_prob
                     FROM processed
-                    WHERE sender_domain = $1 OR sender_domain LIKE $2
+                    WHERE sender_domain ILIKE $1 
+                       OR sender_email ILIKE $1
+                       OR COALESCE(recipients, '') ILIKE $1
                     GROUP BY EXTRACT(YEAR FROM received_dt), EXTRACT(MONTH FROM received_dt)
                     ORDER BY year, month
-                `, [client.email_domain, `%${client.email_domain}`]);
+                `, [domainPattern]);
 
                 // Build sentiment lookup
                 const sentimentLookup = {};
