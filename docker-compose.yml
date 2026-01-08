@@ -17,8 +17,8 @@ services:
       - SENTIMENT_DB_HOST=email_postgres
       - SENTIMENT_DB_PORT=5432
       - SENTIMENT_DB_NAME=email_monitor
-      - SENTIMENT_DB_USER=postgres
-      - SENTIMENT_DB_PASSWORD=strongpassword
+      - SENTIMENT_DB_USER=emailadmin
+      - SENTIMENT_DB_PASSWORD=your_strong_password_here_123
     networks:
       - email-monitor-network
 
