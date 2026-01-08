@@ -26,3 +26,4 @@ services:
 networks:
   email-monitor-network:
     external: true
+    name: email-monitor_email-monitor-network
