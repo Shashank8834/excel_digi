@@ -2313,8 +2313,11 @@ async function loadDashboardClientInsights(clientId) {
     container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading-spinner"></div></div>';
 
     try {
-        // Fetch daily email sentiment data
-        const sentimentData = await apiCall(`/api/insights/sentiment/${clientId}`);
+        // Fetch both sentiment and compliance data in parallel
+        const [sentimentData, complianceData] = await Promise.all([
+            apiCall(`/api/insights/sentiment/${clientId}`),
+            apiCall(`/api/insights/compliance/${clientId}`)
+        ]);
 
         if (!sentimentData.hasData) {
             container.innerHTML = `
@@ -2339,6 +2342,18 @@ async function loadDashboardClientInsights(clientId) {
         const totalNeutral = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.neutral_count || 0), 0);
         const totalPositive = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.positive_count || 0), 0);
 
+        // Calculate risk score (0-100)
+        // Weighted: 50% deadline risk + 50% negative sentiment
+        const negativePercent = totalEmails > 0 ? (totalNegative / totalEmails) * 100 : 0;
+        const pendingPercent = complianceData.total > 0 ? (complianceData.pending / complianceData.total) * 100 : 0;
+        const riskScore = Math.round((pendingPercent * 0.5) + (negativePercent * 0.5));
+
+        // Risk level color
+        let riskColor = '#22c55e'; // Green - Low
+        let riskLabel = 'Low';
+        if (riskScore > 60) { riskColor = '#ef4444'; riskLabel = 'High'; }
+        else if (riskScore > 30) { riskColor = '#fbbf24'; riskLabel = 'Medium'; }
+
         container.innerHTML = `
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
                 <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
@@ -2354,28 +2369,43 @@ async function loadDashboardClientInsights(clientId) {
                     </div>
                 </div>
                 <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
-                    <h4 style="margin-bottom: 0.75rem;">Summary</h4>
-                    <div style="display: grid; gap: 0.75rem;">
-                        <div style="padding: 0.75rem; background: var(--bg-tertiary); border-radius: 4px;">
-                            <div style="font-size: 1.5rem; font-weight: 600;">${totalEmails}</div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Total Emails</div>
+                    <h4 style="margin-bottom: 0.75rem;">Client Summary</h4>
+                    <div style="display: grid; gap: 0.5rem;">
+                        <!-- Risk Score -->
+                        <div style="padding: 0.75rem; background: linear-gradient(135deg, ${riskColor}22, ${riskColor}11); border: 1px solid ${riskColor}44; border-radius: 8px;">
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span style="font-size: 0.85rem; font-weight: 500;">⚠️ Risk Score</span>
+                                <span style="font-size: 1.5rem; font-weight: 700; color: ${riskColor};">${riskScore}</span>
+                            </div>
+                            <div style="font-size: 0.75rem; color: ${riskColor}; font-weight: 500;">${riskLabel} Risk</div>
+                            <div style="font-size: 0.7rem; color: var(--text-muted); margin-top: 0.25rem;">
+                                Pending: ${pendingPercent.toFixed(0)}% | Neg: ${negativePercent.toFixed(0)}%
+                            </div>
                         </div>
-                        <div style="padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px;">
-                            <div style="font-size: 1.25rem; font-weight: 600; color: #ef4444;">${totalNegative}</div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Negative</div>
-                        </div>
-                        <div style="padding: 0.75rem; background: rgba(251, 191, 36, 0.1); border-radius: 4px;">
-                            <div style="font-size: 1.25rem; font-weight: 600; color: #fbbf24;">${totalNeutral}</div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Neutral</div>
-                        </div>
-                        <div style="padding: 0.75rem; background: rgba(34, 197, 94, 0.1); border-radius: 4px;">
-                            <div style="font-size: 1.25rem; font-weight: 600; color: #22c55e;">${totalPositive}</div>
-                            <div style="color: var(--text-muted); font-size: 0.8rem;">Positive</div>
+                        <!-- Stats grid -->
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.5rem;">
+                            <div style="padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; text-align: center;">
+                                <div style="font-size: 1.1rem; font-weight: 600;">${totalEmails}</div>
+                                <div style="color: var(--text-muted); font-size: 0.7rem;">Emails</div>
+                            </div>
+                            <div style="padding: 0.5rem; background: var(--bg-tertiary); border-radius: 4px; text-align: center;">
+                                <div style="font-size: 1.1rem; font-weight: 600;">${complianceData.pending}/${complianceData.total}</div>
+                                <div style="color: var(--text-muted); font-size: 0.7rem;">Pending</div>
+                            </div>
+                            <div style="padding: 0.5rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px; text-align: center;">
+                                <div style="font-size: 1rem; font-weight: 600; color: #ef4444;">${totalNegative}</div>
+                                <div style="color: var(--text-muted); font-size: 0.65rem;">Negative</div>
+                            </div>
+                            <div style="padding: 0.5rem; background: rgba(34, 197, 94, 0.1); border-radius: 4px; text-align: center;">
+                                <div style="font-size: 1rem; font-weight: 600; color: #22c55e;">${totalPositive}</div>
+                                <div style="color: var(--text-muted); font-size: 0.65rem;">Positive</div>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
         `;
+
 
         // Store monthly data globally
         window.monthlyEmailData = monthlyData;
