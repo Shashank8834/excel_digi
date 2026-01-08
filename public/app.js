@@ -459,7 +459,10 @@ async function loadMatrix() {
 
                 // Check if client has OneDrive link for this month
                 const hasOnedriveLink = !!row.client.onedrive_link;
-                const canEdit = isEditable && hasOnedriveLink;
+                // Role check: only managers and admins can edit via matrix
+                const isManagerOrAdmin = currentUser.role === 'manager' || currentUser.role === 'admin';
+                const canEdit = isEditable && hasOnedriveLink && isManagerOrAdmin;
+
 
                 if (canEdit) {
                     html += `
@@ -927,6 +930,13 @@ function showAddLawGroupModal() {
                 <label class="form-label">Display Order</label>
                 <input type="number" class="form-input" name="display_order" value="0">
             </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="manager_only" style="width: auto;">
+                    <span class="form-label" style="margin: 0;">Manager/Admin Only</span>
+                </label>
+                <small style="color: var(--text-muted);">Only managers and admins can update statuses for compliances in this law group</small>
+            </div>
         </form>
     `;
 
@@ -935,7 +945,8 @@ function showAddLawGroupModal() {
         const data = {
             name: form.name.value,
             description: form.description.value,
-            display_order: parseInt(form.display_order.value) || 0
+            display_order: parseInt(form.display_order.value) || 0,
+            manager_only: form.manager_only.checked
         };
 
         try {
@@ -951,6 +962,7 @@ function showAddLawGroupModal() {
 
     openModal();
 }
+
 
 function addCompliance(lawGroupId, lawGroupName) {
     document.getElementById('modalTitle').textContent = `Add Compliance to ${lawGroupName}`;
@@ -1569,6 +1581,17 @@ async function loadMonthSetup() {
                 Set extension days for compliances. These extensions become the default deadline for all future months until changed.
             </p>
             
+            <!-- Add Temporary Compliance Section -->
+            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 1.5rem; margin-bottom: 1.5rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="color: var(--text-secondary);">Add Temporary Compliance</h3>
+                    <button class="btn btn-primary btn-sm" onclick="showAddTempComplianceModal()">+ Add Compliance</button>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-muted);">
+                    Add a compliance for just this month, or make it permanent.
+                </p>
+            </div>
+            
             <!-- Extensions Section -->
             <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 1.5rem;">
                 <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">Extensions</h3>
@@ -1584,7 +1607,7 @@ async function loadMonthSetup() {
                     <tbody>
                         ${extensionData.compliances.map(c => `
                             <tr>
-                                <td>${escapeHtml(c.name)}</td>
+                                <td>${escapeHtml(c.name)}${c.is_temporary ? ' <span style="color: var(--status-pending);">(Temp)</span>' : ''}</td>
                                 <td style="color: var(--text-muted);">${escapeHtml(c.law_group_name)}</td>
                                 <td style="text-align: center;">${c.default_deadline || '-'}</td>
                                 <td>
@@ -1609,6 +1632,68 @@ async function loadMonthSetup() {
         `;
     }
 }
+
+// Show modal to add temporary compliance
+function showAddTempComplianceModal() {
+    document.getElementById('modalTitle').textContent = 'Add Temporary Compliance';
+    document.getElementById('modalBody').innerHTML = `
+        <form id="tempComplianceForm">
+            <div class="form-group">
+                <label class="form-label">Compliance Name *</label>
+                <input type="text" class="form-input" name="name" placeholder="e.g., Special Filing" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Law Group *</label>
+                <select class="form-select" name="law_group_id" required>
+                    ${cachedLawGroups.map(lg => `<option value="${lg.id}">${lg.name}</option>`).join('')}
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Deadline Day (1-31)</label>
+                <input type="number" class="form-input" name="deadline_day" min="1" max="31" placeholder="e.g., 15">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-textarea" name="description" placeholder="What this compliance involves..."></textarea>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="is_permanent" style="width: auto;">
+                    <span class="form-label" style="margin: 0;">Keep Permanently</span>
+                </label>
+                <small style="color: var(--text-muted);">If unchecked, this compliance will only appear for ${getMonthName(currentMonth)} ${currentYear}</small>
+            </div>
+        </form>
+    `;
+
+    document.getElementById('modalSubmit').onclick = async () => {
+        const form = document.getElementById('tempComplianceForm');
+        const isPermanent = form.is_permanent.checked;
+
+        const data = {
+            law_group_id: parseInt(form.law_group_id.value),
+            name: form.name.value,
+            description: form.description.value,
+            deadline_day: form.deadline_day.value ? parseInt(form.deadline_day.value) : null,
+            frequency: 'monthly',
+            is_temporary: isPermanent ? 0 : 1,
+            temp_month: isPermanent ? null : currentMonth,
+            temp_year: isPermanent ? null : currentYear
+        };
+
+        try {
+            await apiCall('/api/compliances', { method: 'POST', body: JSON.stringify(data) });
+            showToast(isPermanent ? 'Compliance added permanently!' : `Temporary compliance added for ${getMonthName(currentMonth)} ${currentYear}`, 'success');
+            closeModal();
+            loadMonthSetup();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    };
+
+    openModal();
+}
+
 
 function populateSetupMonthSelector() {
     // No longer needed - extensions apply to all future months
@@ -2273,7 +2358,9 @@ function renderDashboardChart(data) {
 
     const labels = data.months.map(m => m.label);
     const completionRates = data.months.map(m => parseFloat(m.compliance.completionRate) || 0);
-    const negativeRates = data.months.map(m => m.sentiment ? parseFloat(m.sentiment.negativeRate) : null);
+    // Use 0 as fallback when no sentiment data available
+    const negativeRates = data.months.map(m => m.sentiment ? parseFloat(m.sentiment.negativeRate) : 0);
+    const totalEmails = data.months.reduce((sum, m) => sum + (m.sentiment ? m.sentiment.totalEmails : 0), 0);
 
     new Chart(ctx, {
         type: 'line',
@@ -2287,18 +2374,20 @@ function renderDashboardChart(data) {
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     fill: true,
                     tension: 0.4,
-                    pointRadius: 0,
-                    borderWidth: 2
+                    pointRadius: 3,
+                    borderWidth: 2,
+                    spanGaps: true
                 },
                 {
-                    label: 'Negative %',
+                    label: totalEmails > 0 ? 'Negative %' : 'Negative % (No email data)',
                     data: negativeRates,
-                    borderColor: '#ef4444',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    borderColor: totalEmails > 0 ? '#ef4444' : '#666666',
+                    backgroundColor: totalEmails > 0 ? 'rgba(239, 68, 68, 0.1)' : 'rgba(102, 102, 102, 0.1)',
                     fill: true,
                     tension: 0.4,
-                    pointRadius: 0,
-                    borderWidth: 2
+                    pointRadius: 3,
+                    borderWidth: 2,
+                    spanGaps: true
                 }
             ]
         },
@@ -2313,6 +2402,7 @@ function renderDashboardChart(data) {
         }
     });
 }
+
 
 async function loadInsights() {
     try {

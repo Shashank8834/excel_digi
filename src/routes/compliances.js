@@ -56,7 +56,7 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create compliance (manager only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text } = req.body;
+        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year } = req.body;
 
         if (!law_group_id || !name || !frequency) {
             return res.status(400).json({ error: 'Law group, name, and frequency are required' });
@@ -67,9 +67,9 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         }
 
         const result = db.prepare(`
-            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(law_group_id, name, description, deadline_day, deadline_month, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null);
+            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(law_group_id, name, description, deadline_day, deadline_month, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null, is_temporary ? 1 : 0, temp_month || null, temp_year || null);
 
         res.status(201).json({
             id: result.lastInsertRowid,
@@ -80,6 +80,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         res.status(500).json({ error: 'Failed to create compliance' });
     }
 });
+
 
 // Update compliance (manager only)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {

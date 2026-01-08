@@ -8,8 +8,9 @@
 
     /* Text colors - Pure whites and grays */
     --text-primary: #ffffff;
-    --text-secondary: #a0a0a0;
-    --text-muted: #666666;
+    --text-secondary: #ffffff;
+    --text-muted: #cccccc;
+
 
     /* Accent - Subtle white glow */
     --accent-primary: #ffffff;

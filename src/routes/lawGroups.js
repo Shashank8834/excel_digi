@@ -55,15 +55,15 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create law group (manager only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, description, display_order } = req.body;
+        const { name, description, display_order, manager_only } = req.body;
 
         if (!name) {
             return res.status(400).json({ error: 'Law group name is required' });
         }
 
         const result = db.prepare(`
-            INSERT INTO law_groups (name, description, display_order) VALUES (?, ?, ?)
-        `).run(name, description, display_order || 0);
+            INSERT INTO law_groups (name, description, display_order, manager_only) VALUES (?, ?, ?, ?)
+        `).run(name, description, display_order || 0, manager_only ? 1 : 0);
 
         res.status(201).json({
             id: result.lastInsertRowid,
@@ -78,15 +78,16 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
     }
 });
 
+
 // Update law group (manager only)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, description, display_order } = req.body;
+        const { name, description, display_order, manager_only } = req.body;
 
         db.prepare(`
-            UPDATE law_groups SET name = ?, description = ?, display_order = ?
+            UPDATE law_groups SET name = ?, description = ?, display_order = ?, manager_only = ?
             WHERE id = ?
-        `).run(name, description, display_order || 0, req.params.id);
+        `).run(name, description, display_order || 0, manager_only ? 1 : 0, req.params.id);
 
         res.json({ message: 'Law group updated successfully' });
     } catch (error) {
@@ -94,6 +95,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
         res.status(500).json({ error: 'Failed to update law group' });
     }
 });
+
 
 // Delete law group (manager only)
 router.delete('/:id', authenticateToken, requireManager, (req, res) => {
