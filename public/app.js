@@ -335,6 +335,11 @@ async function loadDashboard() {
 
         html += '</div>';
         document.getElementById('urgentDeadlines').innerHTML = html;
+
+        // Load insights section for managers
+        if (currentUser.role === 'admin' || currentUser.role === 'manager') {
+            loadDashboardInsights();
+        }
     } catch (error) {
         console.error('Dashboard load error:', error);
         showToast('Failed to load dashboard', 'error');
@@ -2188,6 +2193,127 @@ function showUnlockMonthModal() {
 // ===== CLIENT INSIGHTS =====
 let insightsChart = null;
 
+// Load insights section in dashboard
+async function loadDashboardInsights() {
+    const section = document.getElementById('dashboardInsightsSection');
+    if (!section) return;
+
+    section.style.display = 'block';
+
+    try {
+        const clients = await apiCall('/api/insights/clients-with-domains');
+        const select = document.getElementById('dashboardInsightsClient');
+        select.innerHTML = '<option value="">Select a client...</option>' +
+            clients.map(c => `<option value="${c.id}">${c.name}${c.email_domain ? ` (${c.email_domain})` : ''}</option>`).join('');
+
+        select.onchange = () => {
+            const clientId = select.value;
+            if (clientId) {
+                loadDashboardClientInsights(clientId);
+            } else {
+                document.getElementById('dashboardInsightsContent').innerHTML = `
+                    <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                        Select a client to view sentiment & compliance correlation
+                    </div>
+                `;
+            }
+        };
+    } catch (error) {
+        console.error('Load dashboard insights error:', error);
+    }
+}
+
+async function loadDashboardClientInsights(clientId) {
+    const container = document.getElementById('dashboardInsightsContent');
+    container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading-spinner"></div></div>';
+
+    try {
+        const data = await apiCall(`/api/insights/correlation/${clientId}`);
+
+        container.innerHTML = `
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
+                    <div style="height: 250px;">
+                        <canvas id="dashboardCorrelationChart"></canvas>
+                    </div>
+                </div>
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; max-height: 280px; overflow-y: auto;">
+                    <h4 style="margin-bottom: 0.5rem;">Monthly Summary</h4>
+                    <table class="matrix-table" style="font-size: 0.8rem;">
+                        <thead>
+                            <tr><th>Month</th><th>Done</th><th>Pending</th><th>Neg %</th></tr>
+                        </thead>
+                        <tbody>
+                            ${data.months.slice(-6).map(m => `
+                                <tr>
+                                    <td>${m.label}</td>
+                                    <td style="color: var(--status-done);">${m.compliance.completed}</td>
+                                    <td style="color: ${m.compliance.pending > 0 ? 'var(--urgency-warning)' : 'inherit'};">${m.compliance.pending}</td>
+                                    <td style="color: ${m.sentiment && parseFloat(m.sentiment.negativeRate) > 20 ? 'var(--urgency-overdue)' : 'inherit'};">
+                                        ${m.sentiment ? m.sentiment.negativeRate + '%' : '-'}
+                                    </td>
+                                </tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            ${data.sentimentError ? `<p style="margin-top: 0.5rem; color: var(--urgency-warning); font-size: 0.85rem;">⚠️ ${escapeHtml(data.sentimentError)}</p>` : ''}
+        `;
+
+        renderDashboardChart(data);
+    } catch (error) {
+        container.innerHTML = `<div style="color: var(--urgency-overdue);">Failed to load: ${escapeHtml(error.message)}</div>`;
+    }
+}
+
+function renderDashboardChart(data) {
+    const ctx = document.getElementById('dashboardCorrelationChart');
+    if (!ctx) return;
+
+    const labels = data.months.map(m => m.label);
+    const completionRates = data.months.map(m => parseFloat(m.compliance.completionRate) || 0);
+    const negativeRates = data.months.map(m => m.sentiment ? parseFloat(m.sentiment.negativeRate) : null);
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Completion %',
+                    data: completionRates,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Negative %',
+                    data: negativeRates,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    fill: true,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } } },
+            scales: {
+                x: { display: true, ticks: { font: { size: 10 } } },
+                y: { min: 0, max: 100, ticks: { font: { size: 10 } } }
+            }
+        }
+    });
+}
+
 async function loadInsights() {
     try {
         // Load clients with domains for the selector
@@ -2348,9 +2474,10 @@ function renderCorrelationChart(data) {
                     borderColor: '#10b981',
                     backgroundColor: 'rgba(16, 185, 129, 0.1)',
                     fill: true,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointHoverRadius: 8,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    borderWidth: 2,
                     yAxisID: 'y'
                 },
                 {
@@ -2359,9 +2486,10 @@ function renderCorrelationChart(data) {
                     borderColor: '#ef4444',
                     backgroundColor: 'rgba(239, 68, 68, 0.1)',
                     fill: true,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointHoverRadius: 8,
+                    tension: 0.4,
+                    pointRadius: 0,
+                    pointHoverRadius: 6,
+                    borderWidth: 2,
                     yAxisID: 'y'
                 },
                 {

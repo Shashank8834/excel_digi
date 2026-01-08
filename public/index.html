@@ -53,13 +53,6 @@
                         </svg>
                         Calendar
                     </a>
-                    <a class="nav-item manager-only" data-page="insights" style="display: none;">
-                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                            <path d="M3 3v18h18"></path>
-                            <path d="M18 9l-5 5-4-4-3 3"></path>
-                        </svg>
-                        Client Insights
-                    </a>
                     <a class="nav-item admin-only" data-page="monthsetup" style="display: none;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect>
@@ -143,6 +136,23 @@
                     <h2 style="margin-bottom: 1rem;">Urgent Deadlines</h2>
                     <div id="urgentDeadlines">
                         <!-- Urgent items will be loaded here -->
+                    </div>
+                </div>
+
+                <!-- Client Insights Section -->
+                <div class="matrix-container manager-only" id="dashboardInsightsSection"
+                    style="display: none; margin-top: 2rem;">
+                    <div
+                        style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                        <h2>📈 Client Insights</h2>
+                        <select id="dashboardInsightsClient" class="filter-select" style="min-width: 250px;">
+                            <option value="">Select a client...</option>
+                        </select>
+                    </div>
+                    <div id="dashboardInsightsContent">
+                        <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                            Select a client to view sentiment & compliance correlation
+                        </div>
                     </div>
                 </div>
             </div>
