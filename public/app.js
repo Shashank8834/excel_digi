@@ -2432,9 +2432,6 @@ function renderMonthlyEmailChart(monthlyData) {
 
     const labels = monthlyData.map(d => d.label);
     const totalEmails = monthlyData.map(d => d.total_emails);
-    const negativeEmails = monthlyData.map(d => d.negative_count);
-    const neutralEmails = monthlyData.map(d => d.neutral_count);
-    const positiveEmails = monthlyData.map(d => d.positive_count);
 
     emailChart = new Chart(ctx, {
         type: 'line',
@@ -2442,48 +2439,16 @@ function renderMonthlyEmailChart(monthlyData) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Total',
+                    label: 'Emails Received',
                     data: totalEmails,
                     borderColor: '#8b5cf6',
-                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                    fill: false,
-                    tension: 0.3,
+                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                    fill: true,
+                    tension: 0.4,
                     pointRadius: 6,
-                    pointHoverRadius: 8,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Negative',
-                    data: negativeEmails,
-                    borderColor: '#ef4444',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Neutral',
-                    data: neutralEmails,
-                    borderColor: '#fbbf24',
-                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Positive',
-                    data: positiveEmails,
-                    borderColor: '#22c55e',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: 4,
-                    pointHoverRadius: 6,
-                    borderWidth: 2
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: '#8b5cf6',
+                    borderWidth: 3
                 }
             ]
         },
@@ -2576,9 +2541,6 @@ function renderDailyEmailChart(dailyData) {
         return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
     });
     const totalEmails = dailyData.map(d => parseInt(d.total_emails));
-    const negativeEmails = dailyData.map(d => parseInt(d.negative_count));
-    const neutralEmails = dailyData.map(d => parseInt(d.neutral_count || 0));
-    const positiveEmails = dailyData.map(d => parseInt(d.positive_count || 0));
 
     emailChart = new Chart(ctx, {
         type: 'line',
@@ -2586,44 +2548,16 @@ function renderDailyEmailChart(dailyData) {
             labels: labels,
             datasets: [
                 {
-                    label: 'Total',
+                    label: 'Emails Received',
                     data: totalEmails,
                     borderColor: '#8b5cf6',
-                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
-                    fill: false,
-                    tension: 0.3,
+                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                    fill: true,
+                    tension: 0.4,
                     pointRadius: 4,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Negative',
-                    data: negativeEmails,
-                    borderColor: '#ef4444',
-                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Neutral',
-                    data: neutralEmails,
-                    borderColor: '#fbbf24',
-                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    borderWidth: 2
-                },
-                {
-                    label: 'Positive',
-                    data: positiveEmails,
-                    borderColor: '#22c55e',
-                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
-                    fill: false,
-                    tension: 0.3,
-                    pointRadius: 3,
-                    borderWidth: 2
+                    pointHoverRadius: 8,
+                    pointBackgroundColor: '#8b5cf6',
+                    borderWidth: 3
                 }
             ]
         },
