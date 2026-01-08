@@ -56,53 +56,20 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create compliance (manager only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const {
-            law_group_id,
-            name,
-            description,
-            default_deadline,
-            deadline_day,
-            deadline_month,
-            frequency = 'monthly',
-            display_order,
-            manager_only,
-            instruction_video_url,
-            instruction_text,
-            is_temporary,
-            temp_year,
-            temp_month
-        } = req.body;
+        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text } = req.body;
 
-        if (!law_group_id || !name) {
-            return res.status(400).json({ error: 'Law group and name are required' });
+        if (!law_group_id || !name || !frequency) {
+            return res.status(400).json({ error: 'Law group, name, and frequency are required' });
         }
 
-        const actualFrequency = frequency || 'monthly';
-        if (!['monthly', 'quarterly', 'yearly'].includes(actualFrequency)) {
+        if (!['monthly', 'quarterly', 'yearly'].includes(frequency)) {
             return res.status(400).json({ error: 'Frequency must be monthly, quarterly, or yearly' });
         }
 
-        // Use default_deadline or deadline_day
-        const deadlineDay = default_deadline || deadline_day;
-
         const result = db.prepare(`
-            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_year, temp_month)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-            law_group_id,
-            name,
-            description || null,
-            deadlineDay || null,
-            deadline_month || null,
-            actualFrequency,
-            display_order || 0,
-            manager_only ? 1 : 0,
-            instruction_video_url || null,
-            instruction_text || null,
-            is_temporary ? 1 : 0,
-            temp_year || null,
-            temp_month || null
-        );
+            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(law_group_id, name, description, deadline_day, deadline_month, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null);
 
         res.status(201).json({
             id: result.lastInsertRowid,

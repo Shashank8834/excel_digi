@@ -53,25 +53,6 @@ async function migrate() {
             console.log('   ⏭️ Index already exists');
         }
 
-        // 3. Add temp compliance columns to compliances table
-        console.log('3. Checking for temp compliance columns...');
-        const complianceInfo = db.exec("PRAGMA table_info(compliances)");
-        let hasTempCols = false;
-        if (complianceInfo.length > 0) {
-            const cols = complianceInfo[0].values;
-            hasTempCols = cols.some(col => col[1] === 'is_temporary');
-        }
-
-        if (!hasTempCols) {
-            console.log('   Adding temp compliance columns...');
-            db.run('ALTER TABLE compliances ADD COLUMN is_temporary INTEGER DEFAULT 0');
-            db.run('ALTER TABLE compliances ADD COLUMN temp_year INTEGER');
-            db.run('ALTER TABLE compliances ADD COLUMN temp_month INTEGER');
-            console.log('   ✅ Temp compliance columns added');
-        } else {
-            console.log('   ⏭️ Temp compliance columns already exist');
-        }
-
         // Save the database
         const data = db.export();
         const dbBuffer = Buffer.from(data);

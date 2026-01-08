@@ -6,10 +6,10 @@
     --bg-card: #0a0a0a;
     --bg-hover: #1a1a1a;
 
-    /* Text colors - Bright whites */
+    /* Text colors - Pure whites and grays */
     --text-primary: #ffffff;
-    --text-secondary: #e0e0e0;
-    --text-muted: #b0b0b0;
+    --text-secondary: #a0a0a0;
+    --text-muted: #666666;
 
     /* Accent - Subtle white glow */
     --accent-primary: #ffffff;

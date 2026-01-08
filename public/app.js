@@ -1562,42 +1562,8 @@ async function loadMonthSetup() {
     try {
         // Load extensions data (admin only)
         const extensionData = await apiCall('/api/status/extensions');
-        const lawGroups = await apiCall('/api/lawgroups');
 
         document.getElementById('monthSetupContent').innerHTML = `
-            <!-- Quick Add Compliance Section -->
-            <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 1.5rem; margin-bottom: 2rem;">
-                <h3 style="margin-bottom: 1rem;">➕ Quick Add Compliance</h3>
-                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
-                    Add a compliance for this month only (temporary) or permanently to a law group.
-                </p>
-                <div style="display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 1rem; align-items: end;">
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label">Compliance Name *</label>
-                        <input type="text" id="quickComplianceName" class="form-input" placeholder="e.g., Special Filing">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label">Law Group *</label>
-                        <select id="quickLawGroup" class="form-select">
-                            <option value="">Select Law Group</option>
-                            ${lawGroups.map(lg => `<option value="${lg.id}">${escapeHtml(lg.name)}</option>`).join('')}
-                        </select>
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label">Deadline Day</label>
-                        <input type="number" id="quickDeadlineDay" class="form-input" min="1" max="31" placeholder="Day" style="width: 80px;">
-                    </div>
-                    <div class="form-group" style="margin-bottom: 0;">
-                        <label class="form-label">Type</label>
-                        <select id="quickComplianceType" class="form-select" style="width: 150px;">
-                            <option value="temp">This Month Only</option>
-                            <option value="permanent">Permanent</option>
-                        </select>
-                    </div>
-                </div>
-                <button class="btn btn-primary" style="margin-top: 1rem;" onclick="addQuickCompliance()">Add Compliance</button>
-            </div>
-
             <h2 style="margin-bottom: 1rem;">Compliance Extensions</h2>
             <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
                 Set extension days for compliances. These extensions become the default deadline for all future months until changed.
@@ -1618,7 +1584,7 @@ async function loadMonthSetup() {
                     <tbody>
                         ${extensionData.compliances.map(c => `
                             <tr>
-                                <td>${escapeHtml(c.name)}${c.is_temporary ? ' <span style="color: var(--urgency-warning); font-size: 0.7rem;">(TEMP)</span>' : ''}</td>
+                                <td>${escapeHtml(c.name)}</td>
                                 <td style="color: var(--text-muted);">${escapeHtml(c.law_group_name)}</td>
                                 <td style="text-align: center;">${c.default_deadline || '-'}</td>
                                 <td>
@@ -1641,37 +1607,6 @@ async function loadMonthSetup() {
                 Failed to load: ${error.message}
             </div>
         `;
-    }
-}
-
-async function addQuickCompliance() {
-    const name = document.getElementById('quickComplianceName').value.trim();
-    const lawGroupId = document.getElementById('quickLawGroup').value;
-    const deadlineDay = document.getElementById('quickDeadlineDay').value;
-    const type = document.getElementById('quickComplianceType').value;
-
-    if (!name || !lawGroupId) {
-        showToast('Please fill in name and law group', 'error');
-        return;
-    }
-
-    try {
-        await apiCall('/api/compliances', {
-            method: 'POST',
-            body: JSON.stringify({
-                name: name,
-                law_group_id: parseInt(lawGroupId),
-                default_deadline: deadlineDay ? parseInt(deadlineDay) : null,
-                is_temporary: type === 'temp',
-                temp_year: type === 'temp' ? currentYear : null,
-                temp_month: type === 'temp' ? currentMonth : null
-            })
-        });
-
-        showToast(`Compliance "${name}" added successfully!`, 'success');
-        loadMonthSetup(); // Reload to show new compliance
-    } catch (error) {
-        showToast('Failed to add: ' + error.message, 'error');
     }
 }
 
