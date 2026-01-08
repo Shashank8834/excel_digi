@@ -2326,6 +2326,13 @@ async function loadDashboardClientInsights(clientId) {
             return;
         }
 
+        // Store daily data globally for drill-down
+        window.emailSentimentData = sentimentData.sentiment;
+        window.emailDomain = sentimentData.domain;
+
+        // Aggregate by month
+        const monthlyData = aggregateByMonth(sentimentData.sentiment);
+
         // Calculate totals
         const totalEmails = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.total_emails), 0);
         const totalNegative = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.negative_count), 0);
@@ -2335,13 +2342,19 @@ async function loadDashboardClientInsights(clientId) {
         container.innerHTML = `
             <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
                 <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
-                    <h4 style="margin-bottom: 0.5rem;">📧 Email Activity (${sentimentData.domain})</h4>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem;">
+                        <h4 id="chartTitle">📧 Email Activity - ${sentimentData.domain} (Monthly)</h4>
+                        <button id="backToMonthlyBtn" class="btn btn-sm btn-secondary" style="display: none;" onclick="showMonthlyChart()">
+                            ← Back to Monthly
+                        </button>
+                    </div>
+                    <p id="chartSubtitle" style="font-size: 0.8rem; color: var(--text-muted); margin-bottom: 0.5rem;">Click on a month to see daily breakdown</p>
                     <div style="height: 280px;">
                         <canvas id="dashboardEmailChart"></canvas>
                     </div>
                 </div>
                 <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
-                    <h4 style="margin-bottom: 0.75rem;">Summary (${sentimentData.sentiment.length} days)</h4>
+                    <h4 style="margin-bottom: 0.75rem;">Summary</h4>
                     <div style="display: grid; gap: 0.75rem;">
                         <div style="padding: 0.75rem; background: var(--bg-tertiary); border-radius: 4px;">
                             <div style="font-size: 1.5rem; font-weight: 600;">${totalEmails}</div>
@@ -2364,42 +2377,79 @@ async function loadDashboardClientInsights(clientId) {
             </div>
         `;
 
-        // Render the email activity chart
-        renderEmailActivityChart(sentimentData.sentiment);
+        // Store monthly data globally
+        window.monthlyEmailData = monthlyData;
+
+        // Render the monthly chart
+        renderMonthlyEmailChart(monthlyData);
     } catch (error) {
         container.innerHTML = `<div style="color: var(--urgency-overdue);">Failed to load: ${escapeHtml(error.message)}</div>`;
     }
 }
 
-function renderEmailActivityChart(dailyData) {
+// Aggregate daily data into monthly totals
+function aggregateByMonth(dailyData) {
+    const monthly = {};
+
+    dailyData.forEach(d => {
+        const date = new Date(d.date);
+        const key = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+        const label = date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
+
+        if (!monthly[key]) {
+            monthly[key] = {
+                key,
+                label,
+                year: date.getFullYear(),
+                month: date.getMonth() + 1,
+                total_emails: 0,
+                negative_count: 0,
+                neutral_count: 0,
+                positive_count: 0
+            };
+        }
+
+        monthly[key].total_emails += parseInt(d.total_emails);
+        monthly[key].negative_count += parseInt(d.negative_count);
+        monthly[key].neutral_count += parseInt(d.neutral_count || 0);
+        monthly[key].positive_count += parseInt(d.positive_count || 0);
+    });
+
+    // Convert to array sorted by date
+    return Object.values(monthly).sort((a, b) => a.key.localeCompare(b.key));
+}
+
+let emailChart = null;
+
+function renderMonthlyEmailChart(monthlyData) {
     const ctx = document.getElementById('dashboardEmailChart');
     if (!ctx) return;
 
-    // Get last 30 days or all data if less
-    const chartData = dailyData.slice(-30);
+    // Destroy existing chart
+    if (emailChart) {
+        emailChart.destroy();
+    }
 
-    const labels = chartData.map(d => {
-        const date = new Date(d.date);
-        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-    });
-    const totalEmails = chartData.map(d => parseInt(d.total_emails));
-    const negativeEmails = chartData.map(d => parseInt(d.negative_count));
-    const neutralEmails = chartData.map(d => parseInt(d.neutral_count || 0));
-    const positiveEmails = chartData.map(d => parseInt(d.positive_count || 0));
+    const labels = monthlyData.map(d => d.label);
+    const totalEmails = monthlyData.map(d => d.total_emails);
+    const negativeEmails = monthlyData.map(d => d.negative_count);
+    const neutralEmails = monthlyData.map(d => d.neutral_count);
+    const positiveEmails = monthlyData.map(d => d.positive_count);
 
-    new Chart(ctx, {
+    emailChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
                 {
-                    label: 'Total Emails',
+                    label: 'Total',
                     data: totalEmails,
                     borderColor: '#8b5cf6',
                     backgroundColor: 'rgba(139, 92, 246, 0.1)',
                     fill: false,
                     tension: 0.3,
-                    pointRadius: 3,
+                    pointRadius: 6,
+                    pointHoverRadius: 8,
                     borderWidth: 2
                 },
                 {
@@ -2409,7 +2459,8 @@ function renderEmailActivityChart(dailyData) {
                     backgroundColor: 'rgba(239, 68, 68, 0.1)',
                     fill: false,
                     tension: 0.3,
-                    pointRadius: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
                     borderWidth: 2
                 },
                 {
@@ -2419,7 +2470,8 @@ function renderEmailActivityChart(dailyData) {
                     backgroundColor: 'rgba(251, 191, 36, 0.1)',
                     fill: false,
                     tension: 0.3,
-                    pointRadius: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
                     borderWidth: 2
                 },
                 {
@@ -2429,7 +2481,148 @@ function renderEmailActivityChart(dailyData) {
                     backgroundColor: 'rgba(34, 197, 94, 0.1)',
                     fill: false,
                     tension: 0.3,
-                    pointRadius: 2,
+                    pointRadius: 4,
+                    pointHoverRadius: 6,
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const monthData = window.monthlyEmailData[index];
+                    showDailyChartForMonth(monthData.year, monthData.month, monthData.label);
+                }
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        font: { size: 10 },
+                        usePointStyle: true
+                    }
+                },
+                tooltip: {
+                    callbacks: {
+                        footer: () => 'Click to see daily breakdown'
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    ticks: {
+                        font: { size: 10 }
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        font: { size: 10 }
+                    }
+                }
+            }
+        }
+    });
+}
+
+function showDailyChartForMonth(year, month, monthLabel) {
+    // Filter daily data for the selected month
+    const dailyData = window.emailSentimentData.filter(d => {
+        const date = new Date(d.date);
+        return date.getFullYear() === year && date.getMonth() + 1 === month;
+    });
+
+    if (dailyData.length === 0) {
+        showToast('No daily data for this month', 'error');
+        return;
+    }
+
+    // Update UI
+    document.getElementById('chartTitle').textContent = `📧 ${monthLabel} Daily Breakdown`;
+    document.getElementById('chartSubtitle').textContent = 'Daily email counts for ' + monthLabel;
+    document.getElementById('backToMonthlyBtn').style.display = 'inline-block';
+
+    // Render daily chart
+    renderDailyEmailChart(dailyData);
+}
+
+function showMonthlyChart() {
+    document.getElementById('chartTitle').textContent = `📧 Email Activity - ${window.emailDomain} (Monthly)`;
+    document.getElementById('chartSubtitle').textContent = 'Click on a month to see daily breakdown';
+    document.getElementById('backToMonthlyBtn').style.display = 'none';
+
+    renderMonthlyEmailChart(window.monthlyEmailData);
+}
+
+function renderDailyEmailChart(dailyData) {
+    const ctx = document.getElementById('dashboardEmailChart');
+    if (!ctx) return;
+
+    if (emailChart) {
+        emailChart.destroy();
+    }
+
+    const labels = dailyData.map(d => {
+        const date = new Date(d.date);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+    const totalEmails = dailyData.map(d => parseInt(d.total_emails));
+    const negativeEmails = dailyData.map(d => parseInt(d.negative_count));
+    const neutralEmails = dailyData.map(d => parseInt(d.neutral_count || 0));
+    const positiveEmails = dailyData.map(d => parseInt(d.positive_count || 0));
+
+    emailChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Total',
+                    data: totalEmails,
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Negative',
+                    data: negativeEmails,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Neutral',
+                    data: neutralEmails,
+                    borderColor: '#fbbf24',
+                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Positive',
+                    data: positiveEmails,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 3,
                     borderWidth: 2
                 }
             ]
@@ -2462,8 +2655,7 @@ function renderEmailActivityChart(dailyData) {
                 y: {
                     beginAtZero: true,
                     ticks: {
-                        font: { size: 10 },
-                        stepSize: 1
+                        font: { size: 10 }
                     }
                 }
             }
