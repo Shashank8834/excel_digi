@@ -2313,45 +2313,165 @@ async function loadDashboardClientInsights(clientId) {
     container.innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading-spinner"></div></div>';
 
     try {
-        const data = await apiCall(`/api/insights/correlation/${clientId}`);
+        // Fetch daily email sentiment data
+        const sentimentData = await apiCall(`/api/insights/sentiment/${clientId}`);
+
+        if (!sentimentData.hasData) {
+            container.innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: var(--text-muted);">
+                    <p>${escapeHtml(sentimentData.message || 'No email data available for this client')}</p>
+                    <p style="font-size: 0.85rem;">Make sure the client has an email domain configured and the sentiment database is connected.</p>
+                </div>
+            `;
+            return;
+        }
+
+        // Calculate totals
+        const totalEmails = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.total_emails), 0);
+        const totalNegative = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.negative_count), 0);
+        const totalNeutral = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.neutral_count || 0), 0);
+        const totalPositive = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.positive_count || 0), 0);
 
         container.innerHTML = `
-            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem;">
+            <div style="display: grid; grid-template-columns: 2fr 1fr; gap: 1.5rem;">
                 <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
-                    <div style="height: 250px;">
-                        <canvas id="dashboardCorrelationChart"></canvas>
+                    <h4 style="margin-bottom: 0.5rem;">📧 Email Activity (${sentimentData.domain})</h4>
+                    <div style="height: 280px;">
+                        <canvas id="dashboardEmailChart"></canvas>
                     </div>
                 </div>
-                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem; max-height: 280px; overflow-y: auto;">
-                    <h4 style="margin-bottom: 0.5rem;">Monthly Summary</h4>
-                    <table class="matrix-table" style="font-size: 0.8rem;">
-                        <thead>
-                            <tr><th>Month</th><th>Done</th><th>Pending</th><th>Neg %</th></tr>
-                        </thead>
-                        <tbody>
-                            ${data.months.slice(-6).map(m => `
-                                <tr>
-                                    <td>${m.label}</td>
-                                    <td style="color: var(--status-done);">${m.compliance.completed}</td>
-                                    <td style="color: ${m.compliance.pending > 0 ? 'var(--urgency-warning)' : 'inherit'};">${m.compliance.pending}</td>
-                                    <td style="color: ${m.sentiment && parseFloat(m.sentiment.negativeRate) > 20 ? 'var(--urgency-overdue)' : 'inherit'};">
-                                        ${m.sentiment ? m.sentiment.negativeRate + '%' : '-'}
-                                    </td>
-                                </tr>
-                            `).join('')}
-                        </tbody>
-                    </table>
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1rem;">
+                    <h4 style="margin-bottom: 0.75rem;">Summary (${sentimentData.sentiment.length} days)</h4>
+                    <div style="display: grid; gap: 0.75rem;">
+                        <div style="padding: 0.75rem; background: var(--bg-tertiary); border-radius: 4px;">
+                            <div style="font-size: 1.5rem; font-weight: 600;">${totalEmails}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Total Emails</div>
+                        </div>
+                        <div style="padding: 0.75rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px;">
+                            <div style="font-size: 1.25rem; font-weight: 600; color: #ef4444;">${totalNegative}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Negative</div>
+                        </div>
+                        <div style="padding: 0.75rem; background: rgba(251, 191, 36, 0.1); border-radius: 4px;">
+                            <div style="font-size: 1.25rem; font-weight: 600; color: #fbbf24;">${totalNeutral}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Neutral</div>
+                        </div>
+                        <div style="padding: 0.75rem; background: rgba(34, 197, 94, 0.1); border-radius: 4px;">
+                            <div style="font-size: 1.25rem; font-weight: 600; color: #22c55e;">${totalPositive}</div>
+                            <div style="color: var(--text-muted); font-size: 0.8rem;">Positive</div>
+                        </div>
+                    </div>
                 </div>
             </div>
-            ${data.sentimentError ? `<p style="margin-top: 0.5rem; color: var(--urgency-warning); font-size: 0.85rem;">⚠️ ${escapeHtml(data.sentimentError)}</p>` : ''}
         `;
 
-        renderDashboardChart(data);
+        // Render the email activity chart
+        renderEmailActivityChart(sentimentData.sentiment);
     } catch (error) {
         container.innerHTML = `<div style="color: var(--urgency-overdue);">Failed to load: ${escapeHtml(error.message)}</div>`;
     }
 }
 
+function renderEmailActivityChart(dailyData) {
+    const ctx = document.getElementById('dashboardEmailChart');
+    if (!ctx) return;
+
+    // Get last 30 days or all data if less
+    const chartData = dailyData.slice(-30);
+
+    const labels = chartData.map(d => {
+        const date = new Date(d.date);
+        return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    });
+    const totalEmails = chartData.map(d => parseInt(d.total_emails));
+    const negativeEmails = chartData.map(d => parseInt(d.negative_count));
+    const neutralEmails = chartData.map(d => parseInt(d.neutral_count || 0));
+    const positiveEmails = chartData.map(d => parseInt(d.positive_count || 0));
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Total Emails',
+                    data: totalEmails,
+                    borderColor: '#8b5cf6',
+                    backgroundColor: 'rgba(139, 92, 246, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 3,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Negative',
+                    data: negativeEmails,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Neutral',
+                    data: neutralEmails,
+                    borderColor: '#fbbf24',
+                    backgroundColor: 'rgba(251, 191, 36, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2
+                },
+                {
+                    label: 'Positive',
+                    data: positiveEmails,
+                    borderColor: '#22c55e',
+                    backgroundColor: 'rgba(34, 197, 94, 0.1)',
+                    fill: false,
+                    tension: 0.3,
+                    pointRadius: 2,
+                    borderWidth: 2
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            plugins: {
+                legend: {
+                    position: 'top',
+                    labels: {
+                        boxWidth: 12,
+                        font: { size: 10 },
+                        usePointStyle: true
+                    }
+                }
+            },
+            scales: {
+                x: {
+                    display: true,
+                    ticks: {
+                        font: { size: 9 },
+                        maxRotation: 45
+                    }
+                },
+                y: {
+                    beginAtZero: true,
+                    ticks: {
+                        font: { size: 10 },
+                        stepSize: 1
+                    }
+                }
+            }
+        }
+    });
+}
+
+// Legacy function for correlation chart (kept for insights page)
 function renderDashboardChart(data) {
     const ctx = document.getElementById('dashboardCorrelationChart');
     if (!ctx) return;
