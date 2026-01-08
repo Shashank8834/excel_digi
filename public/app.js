@@ -167,6 +167,9 @@ function navigateTo(page) {
         case 'users':
             loadUsers();
             break;
+        case 'insights':
+            loadInsights();
+            break;
     }
 }
 
@@ -722,6 +725,11 @@ function showAddClientModal() {
                 <input type="email" class="form-input" name="channel_mail" placeholder="e.g., team-channel@company.com">
             </div>
             <div class="form-group">
+                <label class="form-label">Email Domain (for sentiment tracking)</label>
+                <input type="text" class="form-input" name="email_domain" placeholder="e.g., acmecorp.com">
+                <small style="color: var(--text-muted);">Used to match emails in sentiment analysis</small>
+            </div>
+            <div class="form-group">
                 <label class="form-label">Assign to Users</label>
                 <select class="form-select" name="user_ids" multiple style="height: 100px;">
                     ${cachedUsers.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('')}
@@ -748,6 +756,7 @@ function showAddClientModal() {
             name: form.name.value,
             industry: form.industry.value,
             channel_mail: form.channel_mail.value || null,
+            email_domain: form.email_domain.value || null,
             notes: form.notes.value,
             user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
             law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
@@ -786,6 +795,11 @@ async function editClient(id) {
                     <input type="email" class="form-input" name="channel_mail" value="${escapeHtml(client.channel_mail || '')}" placeholder="e.g., team-channel@company.com">
                 </div>
                 <div class="form-group">
+                    <label class="form-label">Email Domain (for sentiment tracking)</label>
+                    <input type="text" class="form-input" name="email_domain" value="${escapeHtml(client.email_domain || '')}" placeholder="e.g., acmecorp.com">
+                    <small style="color: var(--text-muted);">Used to match emails in sentiment analysis</small>
+                </div>
+                <div class="form-group">
                     <label class="form-label">Assign to Users</label>
                     <select class="form-select" name="user_ids" multiple style="height: 100px;">
                         ${cachedUsers.map(u => `<option value="${u.id}" ${client.user_ids && client.user_ids.includes(u.id) ? 'selected' : ''}>${u.name} (${u.role})</option>`).join('')}
@@ -812,6 +826,7 @@ async function editClient(id) {
                 name: form.name.value,
                 industry: form.industry.value,
                 channel_mail: form.channel_mail.value || null,
+                email_domain: form.email_domain.value || null,
                 notes: form.notes.value,
                 user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
                 law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
@@ -2167,6 +2182,298 @@ function showUnlockMonthModal() {
             showToast(err.message, 'error');
         }
     };
+    openModal();
+}
+
+// ===== CLIENT INSIGHTS =====
+let insightsChart = null;
+
+async function loadInsights() {
+    try {
+        // Load clients with domains for the selector
+        const clients = await apiCall('/api/insights/clients-with-domains');
+
+        const select = document.getElementById('insightsClient');
+        select.innerHTML = '<option value="">Select a client...</option>' +
+            clients.map(c => `<option value="${c.id}" data-domain="${c.email_domain || ''}">${c.name}${c.email_domain ? ` (${c.email_domain})` : ' - No domain set'}</option>`).join('');
+
+        // Setup change listener
+        select.onchange = () => {
+            const clientId = select.value;
+            if (clientId) {
+                loadClientInsights(clientId);
+            } else {
+                document.getElementById('insightsContent').innerHTML = `
+                    <div class="insights-placeholder">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="64" height="64" style="opacity: 0.3;">
+                            <path d="M3 3v18h18"></path>
+                            <path d="M18 9l-5 5-4-4-3 3"></path>
+                        </svg>
+                        <h3 style="margin-top: 1rem; color: #666;">Select a client to view insights</h3>
+                        <p style="color: #999;">Correlate email sentiment with compliance status</p>
+                    </div>
+                `;
+            }
+        };
+    } catch (error) {
+        console.error('Load insights error:', error);
+        showToast('Failed to load insights data', 'error');
+    }
+}
+
+async function loadClientInsights(clientId) {
+    try {
+        document.getElementById('insightsContent').innerHTML = `
+            <div style="text-align: center; padding: 3rem;">
+                <div class="loading-spinner" style="width: 40px; height: 40px;"></div>
+                <p style="margin-top: 1rem; color: var(--text-muted);">Loading insights...</p>
+            </div>
+        `;
+
+        const data = await apiCall(`/api/insights/correlation/${clientId}`);
+
+        let html = `
+            <div style="margin-bottom: 2rem;">
+                <h2 style="margin-bottom: 0.5rem;">${escapeHtml(data.client)}</h2>
+                <p style="color: var(--text-muted);">
+                    ${data.domain ? `Email Domain: <strong>${escapeHtml(data.domain)}</strong>` : '<em>No email domain configured - only compliance data shown</em>'}
+                </p>
+            </div>
+
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 2rem;">
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem;">📈 Sentiment & Compliance Correlation</h3>
+                    <div style="position: relative; height: 400px;">
+                        <canvas id="correlationChart"></canvas>
+                    </div>
+                    <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 1rem;">
+                        Click on a 30-day marker to drill down. Negative sentiment (red) vs Completion rate (green).
+                    </p>
+                </div>
+
+                <div style="background: var(--bg-secondary); border-radius: 8px; padding: 1.5rem;">
+                    <h3 style="margin-bottom: 1rem;">📊 Monthly Summary</h3>
+                    <div style="max-height: 400px; overflow-y: auto;">
+                        <table class="matrix-table" style="font-size: 0.85rem;">
+                            <thead>
+                                <tr>
+                                    <th>Month</th>
+                                    <th>Completed</th>
+                                    <th>Pending</th>
+                                    <th>Emails</th>
+                                    <th>Neg %</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                ${data.months.map(m => `
+                                    <tr>
+                                        <td style="font-weight: 500;">${m.label}</td>
+                                        <td style="color: var(--status-done);">${m.compliance.completed}</td>
+                                        <td style="color: ${m.compliance.pending > 0 ? 'var(--urgency-warning)' : 'inherit'};">${m.compliance.pending}</td>
+                                        <td>${m.sentiment ? m.sentiment.totalEmails : '-'}</td>
+                                        <td style="color: ${m.sentiment && parseFloat(m.sentiment.negativeRate) > 20 ? 'var(--urgency-overdue)' : 'inherit'};">
+                                            ${m.sentiment ? m.sentiment.negativeRate + '%' : '-'}
+                                        </td>
+                                    </tr>
+                                `).join('')}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            ${data.sentimentError ? `
+                <div style="margin-top: 1rem; padding: 1rem; background: #fff3cd; border-radius: 8px; color: #856404;">
+                    ⚠️ ${escapeHtml(data.sentimentError)}
+                </div>
+            ` : ''}
+        `;
+
+        document.getElementById('insightsContent').innerHTML = html;
+
+        // Render the correlation chart
+        renderCorrelationChart(data);
+
+    } catch (error) {
+        console.error('Load client insights error:', error);
+        document.getElementById('insightsContent').innerHTML = `
+            <div style="text-align: center; padding: 3rem; color: var(--urgency-overdue);">
+                Failed to load insights: ${escapeHtml(error.message)}
+            </div>
+        `;
+    }
+}
+
+function renderCorrelationChart(data) {
+    const ctx = document.getElementById('correlationChart');
+    if (!ctx) return;
+
+    // Destroy existing chart
+    if (insightsChart) {
+        insightsChart.destroy();
+    }
+
+    const labels = data.months.map(m => m.label);
+    const completionRates = data.months.map(m => parseFloat(m.compliance.completionRate) || 0);
+    const negativeRates = data.months.map(m => m.sentiment ? parseFloat(m.sentiment.negativeRate) : null);
+    const pendingCounts = data.months.map(m => m.compliance.pending);
+
+    // Create 30-day interval annotations
+    const annotations = {};
+    labels.forEach((label, index) => {
+        // Add vertical line at each month (30-day intervals)
+        annotations[`line${index}`] = {
+            type: 'line',
+            xMin: index,
+            xMax: index,
+            borderColor: 'rgba(128, 128, 128, 0.3)',
+            borderWidth: 1,
+            borderDash: [5, 5],
+            label: {
+                display: index % 3 === 0, // Show label every 3 months
+                content: label,
+                position: 'start'
+            }
+        };
+    });
+
+    insightsChart = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: 'Completion Rate %',
+                    data: completionRates,
+                    borderColor: '#10b981',
+                    backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 8,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Negative Sentiment %',
+                    data: negativeRates,
+                    borderColor: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    fill: true,
+                    tension: 0.3,
+                    pointRadius: 4,
+                    pointHoverRadius: 8,
+                    yAxisID: 'y'
+                },
+                {
+                    label: 'Pending Tasks',
+                    data: pendingCounts,
+                    borderColor: '#f59e0b',
+                    backgroundColor: 'rgba(245, 158, 11, 0.2)',
+                    type: 'bar',
+                    yAxisID: 'y1'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+                mode: 'index',
+                intersect: false
+            },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const monthData = data.months[index];
+                    showMonthDetail(monthData);
+                }
+            },
+            plugins: {
+                annotation: {
+                    annotations: annotations
+                },
+                tooltip: {
+                    callbacks: {
+                        afterBody: (context) => {
+                            const index = context[0].dataIndex;
+                            const month = data.months[index];
+                            return [
+                                '',
+                                `Total Tasks: ${month.compliance.total}`,
+                                `Completed: ${month.compliance.completed}`,
+                                month.sentiment ? `Total Emails: ${month.sentiment.totalEmails}` : 'No email data'
+                            ];
+                        }
+                    }
+                },
+                legend: {
+                    position: 'top'
+                }
+            },
+            scales: {
+                x: {
+                    grid: {
+                        display: false
+                    }
+                },
+                y: {
+                    type: 'linear',
+                    display: true,
+                    position: 'left',
+                    min: 0,
+                    max: 100,
+                    title: {
+                        display: true,
+                        text: 'Percentage (%)'
+                    }
+                },
+                y1: {
+                    type: 'linear',
+                    display: true,
+                    position: 'right',
+                    min: 0,
+                    title: {
+                        display: true,
+                        text: 'Pending Count'
+                    },
+                    grid: {
+                        drawOnChartArea: false
+                    }
+                }
+            }
+        }
+    });
+}
+
+function showMonthDetail(monthData) {
+    document.getElementById('modalTitle').textContent = `Details: ${monthData.label}`;
+    document.getElementById('modalBody').innerHTML = `
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem;">
+            <div>
+                <h4 style="margin-bottom: 1rem; color: var(--status-done);">📋 Compliance</h4>
+                <table class="matrix-table" style="font-size: 0.9rem;">
+                    <tr><td>Completed</td><td><strong>${monthData.compliance.completed}</strong></td></tr>
+                    <tr><td>Pending</td><td><strong>${monthData.compliance.pending}</strong></td></tr>
+                    <tr><td>Total</td><td><strong>${monthData.compliance.total}</strong></td></tr>
+                    <tr><td>Completion Rate</td><td><strong>${monthData.compliance.completionRate}%</strong></td></tr>
+                </table>
+            </div>
+            <div>
+                <h4 style="margin-bottom: 1rem; color: var(--urgency-overdue);">📧 Email Sentiment</h4>
+                ${monthData.sentiment ? `
+                    <table class="matrix-table" style="font-size: 0.9rem;">
+                        <tr><td>Total Emails</td><td><strong>${monthData.sentiment.totalEmails}</strong></td></tr>
+                        <tr><td>Negative Emails</td><td><strong>${monthData.sentiment.negativeCount}</strong></td></tr>
+                        <tr><td>Negative Rate</td><td><strong>${monthData.sentiment.negativeRate}%</strong></td></tr>
+                        <tr><td>Avg Neg Prob</td><td><strong>${monthData.sentiment.avgNegativeProb}%</strong></td></tr>
+                    </table>
+                ` : '<p style="color: var(--text-muted);">No email sentiment data available</p>'}
+            </div>
+        </div>
+    `;
+    document.getElementById('modalFooter').innerHTML = `
+        <button class="btn btn-secondary" onclick="closeModal()">Close</button>
+    `;
     openModal();
 }
 

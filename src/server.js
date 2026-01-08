@@ -42,6 +42,14 @@ async function startServer() {
         app.use('/api/compliances', require('./routes/compliances'));
         app.use('/api/status', require('./routes/status'));
 
+        // Insights routes - OPTIONAL feature, won't break app if it fails
+        try {
+            app.use('/api/insights', require('./routes/insights'));
+            console.log('📊 Client Insights API loaded');
+        } catch (e) {
+            console.log('📊 Client Insights API not loaded (optional):', e.message);
+        }
+
         // Serve index.html for all non-API routes (SPA support)
         app.get('*', (req, res) => {
             if (!req.path.startsWith('/api')) {

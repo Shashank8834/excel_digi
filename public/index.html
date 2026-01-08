@@ -9,6 +9,8 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation"></script>
 </head>
 
 <body>
@@ -50,6 +52,13 @@
                             <line x1="3" y1="10" x2="21" y2="10"></line>
                         </svg>
                         Calendar
+                    </a>
+                    <a class="nav-item manager-only" data-page="insights" style="display: none;">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M3 3v18h18"></path>
+                            <path d="M18 9l-5 5-4-4-3 3"></path>
+                        </svg>
+                        Client Insights
                     </a>
                     <a class="nav-item admin-only" data-page="monthsetup" style="display: none;">
                         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -271,6 +280,32 @@
                 <div class="matrix-container">
                     <div id="lawGroupsContent">
                         <!-- Law groups will be loaded here -->
+                    </div>
+                </div>
+            </div>
+
+            <!-- Client Insights Page -->
+            <div id="page-insights" class="page" style="display: none;">
+                <header class="page-header">
+                    <h1 class="page-title">Client Insights & Correlation</h1>
+                    <div class="header-actions">
+                        <select id="insightsClient" class="filter-select" style="min-width: 250px;">
+                            <option value="">Select a client...</option>
+                        </select>
+                    </div>
+                </header>
+
+                <div class="matrix-container">
+                    <div id="insightsContent">
+                        <div class="insights-placeholder">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" width="64"
+                                height="64" style="opacity: 0.3;">
+                                <path d="M3 3v18h18"></path>
+                                <path d="M18 9l-5 5-4-4-3 3"></path>
+                            </svg>
+                            <h3 style="margin-top: 1rem; color: #666;">Select a client to view insights</h3>
+                            <p style="color: #999;">Correlate email sentiment with compliance status</p>
+                        </div>
                     </div>
                 </div>
             </div>

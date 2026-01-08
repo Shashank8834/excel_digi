@@ -13,3 +13,16 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      # Connect to Email Sentiment PostgreSQL database for insights
+      - SENTIMENT_DB_HOST=email_postgres
+      - SENTIMENT_DB_PORT=5432
+      - SENTIMENT_DB_NAME=email_monitor
+      - SENTIMENT_DB_USER=postgres
+      - SENTIMENT_DB_PASSWORD=strongpassword
+    networks:
+      - email-monitor-network
+
+# Connect to the external network created by email sentiment app
+networks:
+  email-monitor-network:
+    external: true

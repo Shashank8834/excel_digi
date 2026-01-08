@@ -26,6 +26,7 @@ CREATE TABLE IF NOT EXISTS clients (
     industry TEXT,
     notes TEXT,
     channel_mail TEXT, -- Email for overdue notifications
+    email_domain TEXT, -- Domain for email sentiment matching (e.g., 'acmecorp.com')
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
