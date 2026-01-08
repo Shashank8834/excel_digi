@@ -76,6 +76,9 @@ CREATE TABLE IF NOT EXISTS compliances (
     instruction_text TEXT, -- Text instructions
     display_order INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
+    is_temporary INTEGER DEFAULT 0, -- If 1, this compliance is for one month only
+    temp_year INTEGER, -- Year for temporary compliance
+    temp_month INTEGER, -- Month for temporary compliance
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (law_group_id) REFERENCES law_groups(id) ON DELETE CASCADE
 );

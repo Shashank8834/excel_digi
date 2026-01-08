@@ -303,6 +303,7 @@ router.get('/extensions', authenticateToken, requireAdmin, (req, res) => {
         const compliances = db.prepare(`
             SELECT 
                 c.id, c.name, c.deadline_day as default_deadline,
+                c.is_temporary,
                 lg.name as law_group_name,
                 dce.extension_day
             FROM compliances c
