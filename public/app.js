@@ -2405,7 +2405,9 @@ function aggregateByMonth(dailyData) {
                 total_emails: 0,
                 negative_count: 0,
                 neutral_count: 0,
-                positive_count: 0
+                positive_count: 0,
+                prob_sum: 0,
+                prob_count: 0
             };
         }
 
@@ -2413,11 +2415,25 @@ function aggregateByMonth(dailyData) {
         monthly[key].negative_count += parseInt(d.negative_count);
         monthly[key].neutral_count += parseInt(d.neutral_count || 0);
         monthly[key].positive_count += parseInt(d.positive_count || 0);
+        if (d.avg_negative_prob) {
+            monthly[key].prob_sum += parseFloat(d.avg_negative_prob) * parseInt(d.total_emails);
+            monthly[key].prob_count += parseInt(d.total_emails);
+        }
     });
 
-    // Convert to array sorted by date
-    return Object.values(monthly).sort((a, b) => a.key.localeCompare(b.key));
+    // Calculate averages and dominant sentiment
+    return Object.values(monthly).map(m => {
+        const avgProb = m.prob_count > 0 ? m.prob_sum / m.prob_count : 0.5;
+        // Determine dominant sentiment
+        const max = Math.max(m.negative_count, m.neutral_count, m.positive_count);
+        let sentiment = 'Neutral';
+        if (m.negative_count === max) sentiment = 'Negative';
+        else if (m.positive_count === max) sentiment = 'Positive';
+
+        return { ...m, avg_prob: avgProb, dominant_sentiment: sentiment };
+    }).sort((a, b) => a.key.localeCompare(b.key));
 }
+
 
 let emailChart = null;
 
@@ -2433,22 +2449,32 @@ function renderMonthlyEmailChart(monthlyData) {
     const labels = monthlyData.map(d => d.label);
     const totalEmails = monthlyData.map(d => d.total_emails);
 
+    // Color points based on dominant sentiment
+    const sentimentColors = {
+        'Negative': '#ef4444',
+        'Neutral': '#fbbf24',
+        'Positive': '#22c55e'
+    };
+    const pointColors = monthlyData.map(d => sentimentColors[d.dominant_sentiment]);
+
     emailChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
                 {
-                    label: 'Emails Received',
+                    label: 'Emails',
                     data: totalEmails,
-                    borderColor: '#8b5cf6',
-                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                    borderColor: '#888888',
+                    backgroundColor: 'rgba(136, 136, 136, 0.1)',
                     fill: true,
                     tension: 0.4,
-                    pointRadius: 6,
-                    pointHoverRadius: 10,
-                    pointBackgroundColor: '#8b5cf6',
-                    borderWidth: 3
+                    pointRadius: 10,
+                    pointHoverRadius: 14,
+                    pointBackgroundColor: pointColors,
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    borderWidth: 2
                 }
             ]
         },
@@ -2468,15 +2494,18 @@ function renderMonthlyEmailChart(monthlyData) {
             },
             plugins: {
                 legend: {
-                    position: 'top',
-                    labels: {
-                        boxWidth: 12,
-                        font: { size: 10 },
-                        usePointStyle: true
-                    }
+                    display: false
                 },
                 tooltip: {
                     callbacks: {
+                        label: (context) => {
+                            const data = monthlyData[context.dataIndex];
+                            return [
+                                `Emails: ${context.parsed.y}`,
+                                `Sentiment: ${data.dominant_sentiment}`,
+                                `🔴 Neg: ${data.negative_count} | 🟡 Neu: ${data.neutral_count} | 🟢 Pos: ${data.positive_count}`
+                            ];
+                        },
                         footer: () => 'Click to see daily breakdown'
                     }
                 }
@@ -2484,20 +2513,22 @@ function renderMonthlyEmailChart(monthlyData) {
             scales: {
                 x: {
                     display: true,
-                    ticks: {
-                        font: { size: 10 }
-                    }
+                    ticks: { font: { size: 10 } }
                 },
                 y: {
                     beginAtZero: true,
-                    ticks: {
+                    title: {
+                        display: true,
+                        text: 'Emails',
                         font: { size: 10 }
-                    }
+                    },
+                    ticks: { font: { size: 10 } }
                 }
             }
         }
     });
 }
+
 
 function showDailyChartForMonth(year, month, monthLabel) {
     // Filter daily data for the selected month
@@ -2542,22 +2573,40 @@ function renderDailyEmailChart(dailyData) {
     });
     const totalEmails = dailyData.map(d => parseInt(d.total_emails));
 
+    // Determine dominant sentiment for each day and color points
+    const sentimentColors = {
+        'Negative': '#ef4444',
+        'Neutral': '#fbbf24',
+        'Positive': '#22c55e'
+    };
+    const pointColors = dailyData.map(d => {
+        const neg = parseInt(d.negative_count);
+        const neu = parseInt(d.neutral_count || 0);
+        const pos = parseInt(d.positive_count || 0);
+        const max = Math.max(neg, neu, pos);
+        if (neg === max) return sentimentColors['Negative'];
+        if (pos === max) return sentimentColors['Positive'];
+        return sentimentColors['Neutral'];
+    });
+
     emailChart = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
             datasets: [
                 {
-                    label: 'Emails Received',
+                    label: 'Emails',
                     data: totalEmails,
-                    borderColor: '#8b5cf6',
-                    backgroundColor: 'rgba(139, 92, 246, 0.2)',
+                    borderColor: '#888888',
+                    backgroundColor: 'rgba(136, 136, 136, 0.1)',
                     fill: true,
                     tension: 0.4,
-                    pointRadius: 4,
-                    pointHoverRadius: 8,
-                    pointBackgroundColor: '#8b5cf6',
-                    borderWidth: 3
+                    pointRadius: 8,
+                    pointHoverRadius: 12,
+                    pointBackgroundColor: pointColors,
+                    pointBorderColor: '#ffffff',
+                    pointBorderWidth: 2,
+                    borderWidth: 2
                 }
             ]
         },
@@ -2569,33 +2618,37 @@ function renderDailyEmailChart(dailyData) {
                 intersect: false
             },
             plugins: {
-                legend: {
-                    position: 'top',
-                    labels: {
-                        boxWidth: 12,
-                        font: { size: 10 },
-                        usePointStyle: true
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const data = dailyData[context.dataIndex];
+                            const neg = parseInt(data.negative_count);
+                            const neu = parseInt(data.neutral_count || 0);
+                            const pos = parseInt(data.positive_count || 0);
+                            return [
+                                `Emails: ${context.parsed.y}`,
+                                `🔴 Neg: ${neg} | 🟡 Neu: ${neu} | 🟢 Pos: ${pos}`
+                            ];
+                        }
                     }
                 }
             },
             scales: {
                 x: {
                     display: true,
-                    ticks: {
-                        font: { size: 9 },
-                        maxRotation: 45
-                    }
+                    ticks: { font: { size: 9 }, maxRotation: 45 }
                 },
                 y: {
                     beginAtZero: true,
-                    ticks: {
-                        font: { size: 10 }
-                    }
+                    title: { display: true, text: 'Emails', font: { size: 10 } },
+                    ticks: { font: { size: 10 } }
                 }
             }
         }
     });
 }
+
 
 // Legacy function for correlation chart (kept for insights page)
 function renderDashboardChart(data) {
