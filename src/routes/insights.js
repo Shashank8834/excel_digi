@@ -178,7 +178,18 @@ router.get('/compliance/:clientId', authenticateToken, (req, res) => {
             completion_rate: row.total > 0 ? ((row.completed / (row.total - row.not_applicable)) * 100).toFixed(1) : 0
         }));
 
-        res.json({ compliance });
+        // Calculate totals for risk score
+        const totalCompliances = monthlyStats.reduce((sum, row) => sum + row.total, 0);
+        const totalPending = monthlyStats.reduce((sum, row) => sum + row.pending, 0);
+        const totalCompleted = monthlyStats.reduce((sum, row) => sum + row.completed, 0);
+
+        res.json({
+            compliance,
+            total: totalCompliances,
+            pending: totalPending,
+            completed: totalCompleted
+        });
+
 
     } catch (error) {
         console.error('Get compliance data error:', error);
