@@ -21,8 +21,8 @@ router.get('/', authenticateToken, requireManager, (req, res) => {
     }
 });
 
-// Create user (admin only)
-router.post('/', authenticateToken, requireAdmin, (req, res) => {
+// Create user (admin and manager)
+router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
         const { name, email, role } = req.body;
         // Default password is 'password123' if not provided
@@ -36,10 +36,16 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
             return res.status(400).json({ error: 'Role must be admin, manager, or team_member' });
         }
 
+        // Managers cannot create admin users
+        if (req.user.role === 'manager' && role === 'admin') {
+            return res.status(403).json({ error: 'Managers cannot create admin users' });
+        }
+
         const passwordHash = bcrypt.hashSync(password, 10);
 
+        // New users must change password on first login
         const result = db.prepare(`
-            INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)
+            INSERT INTO users (name, email, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, 1)
         `).run(name, email, passwordHash, role);
 
         res.status(201).json({
@@ -55,13 +61,30 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
     }
 });
 
-// Update user (admin only)
-router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
+// Update user (admin and manager with restrictions)
+router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
         const { name, email, role, password } = req.body;
+        const targetUserId = parseInt(req.params.id);
 
         if (!['admin', 'manager', 'team_member'].includes(role)) {
             return res.status(400).json({ error: 'Role must be admin, manager, or team_member' });
+        }
+
+        // Get the target user to check their role
+        const targetUser = db.prepare('SELECT role FROM users WHERE id = ?').get(targetUserId);
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Managers cannot edit admin users
+        if (req.user.role === 'manager' && targetUser.role === 'admin') {
+            return res.status(403).json({ error: 'Managers cannot edit admin users' });
+        }
+
+        // Managers cannot promote users to admin
+        if (req.user.role === 'manager' && role === 'admin') {
+            return res.status(403).json({ error: 'Managers cannot promote users to admin' });
         }
 
         if (password) {
@@ -69,12 +92,12 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
             db.prepare(`
                 UPDATE users SET name = ?, email = ?, role = ?, password_hash = ?
                 WHERE id = ?
-            `).run(name, email, role, passwordHash, req.params.id);
+            `).run(name, email, role, passwordHash, targetUserId);
         } else {
             db.prepare(`
                 UPDATE users SET name = ?, email = ?, role = ?
                 WHERE id = ?
-            `).run(name, email, role, req.params.id);
+            `).run(name, email, role, targetUserId);
         }
 
         res.json({ message: 'User updated successfully' });
@@ -84,17 +107,30 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
     }
 });
 
-// Delete user (admin only)
-router.delete('/:id', authenticateToken, requireAdmin, (req, res) => {
+// Delete user (admin and manager with restrictions)
+router.delete('/:id', authenticateToken, requireManager, (req, res) => {
     try {
+        const targetUserId = parseInt(req.params.id);
+
         // Prevent self-deletion
-        if (parseInt(req.params.id) === req.user.id) {
+        if (targetUserId === req.user.id) {
             return res.status(400).json({ error: 'Cannot delete your own account' });
         }
 
+        // Get the target user to check their role
+        const targetUser = db.prepare('SELECT role FROM users WHERE id = ?').get(targetUserId);
+        if (!targetUser) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        // Managers cannot delete admin users
+        if (req.user.role === 'manager' && targetUser.role === 'admin') {
+            return res.status(403).json({ error: 'Managers cannot delete admin users' });
+        }
+
         // Also remove user-client assignments
-        db.prepare('DELETE FROM user_client_assignments WHERE user_id = ?').run(req.params.id);
-        db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+        db.prepare('DELETE FROM user_client_assignments WHERE user_id = ?').run(targetUserId);
+        db.prepare('DELETE FROM users WHERE id = ?').run(targetUserId);
         res.json({ message: 'User deleted successfully' });
     } catch (error) {
         console.error('Delete user error:', error);
@@ -103,4 +139,3 @@ router.delete('/:id', authenticateToken, requireAdmin, (req, res) => {
 });
 
 module.exports = router;
-

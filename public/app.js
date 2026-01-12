@@ -1531,6 +1531,8 @@ async function editTeam(id) {
 async function loadUsers() {
     try {
         const users = await apiCall('/api/users');
+        const isAdmin = currentUser.role === 'admin';
+        const isManager = currentUser.role === 'manager';
 
         document.getElementById('usersContent').innerHTML = `
             <table class="matrix-table">
@@ -1544,20 +1546,28 @@ async function loadUsers() {
                     </tr>
                 </thead>
                 <tbody>
-                    ${users.map(u => `
-                        <tr>
-                            <td><strong>${escapeHtml(u.name)}</strong></td>
-                            <td>${escapeHtml(u.email)}</td>
-                            <td><span class="status-badge ${u.role === 'manager' ? 'status-done' : 'status-pending'}">${u.role.replace('_', ' ')}</span></td>
-                            <td>${escapeHtml(u.team_name || 'None')}</td>
-                            <td>
-                                <button class="btn btn-sm btn-secondary" onclick="editUser(${u.id})">Edit</button>
-                                ${u.id !== currentUser.id ? `
-                                    <button class="btn btn-sm btn-secondary" onclick="deleteUser(${u.id})" style="color: var(--urgency-overdue);">Delete</button>
-                                ` : ''}
-                            </td>
-                        </tr>
-                    `).join('')}
+                    ${users.map(u => {
+            // Determine what actions are allowed
+            const isTargetAdmin = u.role === 'admin';
+            const isSelf = u.id === currentUser.id;
+
+            // Managers cannot edit/delete admins
+            const canEdit = isAdmin || (isManager && !isTargetAdmin);
+            const canDelete = !isSelf && (isAdmin || (isManager && !isTargetAdmin));
+
+            return `
+                            <tr>
+                                <td><strong>${escapeHtml(u.name)}</strong></td>
+                                <td>${escapeHtml(u.email)}</td>
+                                <td><span class="status-badge ${u.role === 'admin' ? 'status-na' : u.role === 'manager' ? 'status-done' : 'status-pending'}">${u.role.replace('_', ' ').toUpperCase()}</span></td>
+                                <td>${escapeHtml(u.team_name || 'None')}</td>
+                                <td>
+                                    ${canEdit ? `<button class="btn btn-sm btn-secondary" onclick="editUser(${u.id})">Edit</button>` : ''}
+                                    ${canDelete ? `<button class="btn btn-sm btn-secondary" onclick="deleteUser(${u.id})" style="color: var(--urgency-overdue);">Delete</button>` : ''}
+                                </td>
+                            </tr>
+                        `;
+        }).join('')}
                 </tbody>
             </table>
         `;
@@ -3415,6 +3425,12 @@ async function submitPasswordChange(isForced) {
         return;
     }
 
+    // Show loading state on button
+    const submitBtn = document.querySelector('#modalFooter .btn-primary');
+    const originalText = submitBtn.innerHTML;
+    submitBtn.disabled = true;
+    submitBtn.innerHTML = '<span class="loading-spinner"></span> Changing...';
+
     try {
         await apiCall('/api/auth/change-password', {
             method: 'POST',
@@ -3443,5 +3459,7 @@ async function submitPasswordChange(isForced) {
         }
     } catch (error) {
         showToast(error.message, 'error');
+        submitBtn.disabled = false;
+        submitBtn.innerHTML = originalText;
     }
 }
