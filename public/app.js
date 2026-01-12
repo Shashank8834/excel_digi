@@ -339,10 +339,6 @@ async function loadDashboard() {
         html += '</div>';
         document.getElementById('urgentDeadlines').innerHTML = html;
 
-        // Load insights section for managers
-        if (currentUser.role === 'admin' || currentUser.role === 'manager') {
-            loadDashboardInsights();
-        }
     } catch (error) {
         console.error('Dashboard load error:', error);
         showToast('Failed to load dashboard', 'error');
@@ -398,11 +394,20 @@ async function loadCompanyInsights(clientId, container) {
         else if (riskScore > 30) { riskColor = '#fbbf24'; riskLabel = 'Medium'; }
 
         const chartId = `company-chart-${clientId}`;
+        const containerId = `chart-container-${clientId}`;
 
         container.innerHTML = `
             <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;">
-                <div style="height: 180px;">
-                    <canvas id="${chartId}"></canvas>
+                <div>
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem;">
+                        <span id="chart-title-${clientId}" style="font-size: 0.75rem; color: var(--text-muted);">Monthly Email Activity</span>
+                        <button id="back-btn-${clientId}" class="btn btn-sm btn-secondary" style="display: none; font-size: 0.7rem; padding: 0.15rem 0.5rem;" onclick="showCompanyMonthlyChart(${clientId})">
+                            ← Back
+                        </button>
+                    </div>
+                    <div id="${containerId}" style="height: 160px;">
+                        <canvas id="${chartId}"></canvas>
+                    </div>
                 </div>
                 <div style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 100px;">
                     <div style="padding: 0.5rem; background: linear-gradient(135deg, ${riskColor}22, ${riskColor}11); border: 1px solid ${riskColor}44; border-radius: 6px; text-align: center;">
@@ -431,30 +436,60 @@ async function loadCompanyInsights(clientId, container) {
             </div>
         `;
 
-        // Aggregate to monthly and render chart
+        // Aggregate to monthly and store data
         const monthlyData = aggregateByMonth(sentimentData.sentiment);
-        renderCompanyChart(chartId, monthlyData);
+
+        // Store data for drill-down
+        window.companyChartData = window.companyChartData || {};
+        window.companyChartData[clientId] = {
+            daily: sentimentData.sentiment,
+            monthly: monthlyData,
+            chartId: chartId,
+            containerId: containerId
+        };
+
+        renderCompanyChart(clientId, monthlyData, true);
     } catch (error) {
         container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">Could not load insights</div>`;
     }
 }
 
+// Store chart instances per company
+window.companyCharts = window.companyCharts || {};
+
 // Render chart for a company in the dashboard
-function renderCompanyChart(canvasId, monthlyData) {
-    const ctx = document.getElementById(canvasId);
+function renderCompanyChart(clientId, data, isMonthly) {
+    const chartData = window.companyChartData[clientId];
+    const ctx = document.getElementById(chartData.chartId);
     if (!ctx) return;
 
-    const labels = monthlyData.map(d => d.label);
-    const totalEmails = monthlyData.map(d => d.total_emails);
+    // Destroy existing chart
+    if (window.companyCharts[clientId]) {
+        window.companyCharts[clientId].destroy();
+    }
 
-    const sentimentColors = {
-        'Negative': '#ef4444',
-        'Neutral': '#fbbf24',
-        'Positive': '#22c55e'
-    };
-    const pointColors = monthlyData.map(d => sentimentColors[d.dominant_sentiment]);
+    const labels = isMonthly
+        ? data.map(d => d.label)
+        : data.map(d => new Date(d.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
 
-    new Chart(ctx, {
+    const totalEmails = isMonthly
+        ? data.map(d => d.total_emails)
+        : data.map(d => parseInt(d.total_emails));
+
+    const sentimentColors = { 'Negative': '#ef4444', 'Neutral': '#fbbf24', 'Positive': '#22c55e' };
+
+    const pointColors = data.map(d => {
+        if (isMonthly) return sentimentColors[d.dominant_sentiment];
+        const neg = parseInt(d.negative_count);
+        const neu = parseInt(d.neutral_count || 0);
+        const pos = parseInt(d.positive_count || 0);
+        const max = Math.max(neg, neu, pos);
+        if (neg === max) return sentimentColors['Negative'];
+        if (pos === max) return sentimentColors['Positive'];
+        return sentimentColors['Neutral'];
+    });
+
+    window.companyCharts[clientId] = new Chart(ctx, {
         type: 'line',
         data: {
             labels: labels,
@@ -465,8 +500,8 @@ function renderCompanyChart(canvasId, monthlyData) {
                 backgroundColor: 'rgba(136, 136, 136, 0.1)',
                 fill: true,
                 tension: 0.4,
-                pointRadius: 8,
-                pointHoverRadius: 10,
+                pointRadius: isMonthly ? 8 : 5,
+                pointHoverRadius: isMonthly ? 10 : 7,
                 pointBackgroundColor: pointColors,
                 pointBorderColor: '#ffffff',
                 pointBorderWidth: 2,
@@ -476,14 +511,53 @@ function renderCompanyChart(canvasId, monthlyData) {
         options: {
             responsive: true,
             maintainAspectRatio: false,
-            plugins: { legend: { display: false } },
+            onClick: isMonthly ? (event, elements) => {
+                if (elements.length > 0) {
+                    const index = elements[0].index;
+                    const monthData = chartData.monthly[index];
+                    showCompanyDailyChart(clientId, monthData.year, monthData.month, monthData.label);
+                }
+            } : undefined,
+            plugins: {
+                legend: { display: false },
+                tooltip: isMonthly ? {
+                    callbacks: { footer: () => 'Click to see daily' }
+                } : {}
+            },
             scales: {
-                x: { display: true, ticks: { font: { size: 9 } } },
-                y: { beginAtZero: true, ticks: { font: { size: 9 } } }
+                x: { display: true, ticks: { font: { size: 8 }, maxRotation: 45 } },
+                y: { beginAtZero: true, ticks: { font: { size: 8 } } }
             }
         }
     });
 }
+
+// Drill down to daily view for a company
+function showCompanyDailyChart(clientId, year, month, monthLabel) {
+    const chartData = window.companyChartData[clientId];
+    const dailyData = chartData.daily.filter(d => {
+        const date = new Date(d.date);
+        return date.getFullYear() === year && date.getMonth() + 1 === month;
+    });
+
+    if (dailyData.length === 0) return;
+
+    document.getElementById(`chart-title-${clientId}`).textContent = `${monthLabel} Daily`;
+    document.getElementById(`back-btn-${clientId}`).style.display = 'inline-block';
+
+    renderCompanyChart(clientId, dailyData, false);
+}
+
+// Go back to monthly view for a company
+function showCompanyMonthlyChart(clientId) {
+    const chartData = window.companyChartData[clientId];
+
+    document.getElementById(`chart-title-${clientId}`).textContent = 'Monthly Email Activity';
+    document.getElementById(`back-btn-${clientId}`).style.display = 'none';
+
+    renderCompanyChart(clientId, chartData.monthly, true);
+}
+
 
 
 // ===== COMPLIANCE MATRIX =====
