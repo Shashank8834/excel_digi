@@ -22,6 +22,13 @@ document.addEventListener('DOMContentLoaded', async () => {
     try {
         currentUser = JSON.parse(userStr);
         initializeUI();
+
+        // Check if user must change password on first login
+        if (currentUser.must_change_password) {
+            showForcePasswordChangeModal();
+            return; // Don't load dashboard until password is changed
+        }
+
         await loadInitialData();
         navigateTo('dashboard');
     } catch (error) {
@@ -3320,3 +3327,121 @@ function logout() {
     window.location.href = '/login.html';
 }
 
+// ===== PASSWORD CHANGE =====
+// Show forced password change modal (cannot be closed)
+function showForcePasswordChangeModal() {
+    document.getElementById('modalTitle').textContent = '🔐 Password Change Required';
+    document.getElementById('modalBody').innerHTML = `
+        <div style="margin-bottom: 1rem; padding: 1rem; background: rgba(251, 191, 36, 0.1); border: 1px solid rgba(251, 191, 36, 0.3); border-radius: 8px;">
+            <p style="margin: 0; font-weight: 500;">You must change your password to continue.</p>
+            <p style="margin: 0.5rem 0 0; font-size: 0.85rem; color: var(--text-muted);">This is required for first-time login or when using a default password.</p>
+        </div>
+        <form id="forcePasswordForm">
+            <div class="form-group">
+                <label class="form-label">Current Password *</label>
+                <input type="password" class="form-input" name="currentPassword" placeholder="Enter current password" required>
+                <small style="color: var(--text-muted);">Default password is: password123</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password *</label>
+                <input type="password" class="form-input" name="newPassword" placeholder="Enter new password (min 6 characters)" required minlength="6">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Password *</label>
+                <input type="password" class="form-input" name="confirmPassword" placeholder="Confirm new password" required>
+            </div>
+        </form>
+    `;
+    document.getElementById('modalFooter').innerHTML = `
+        <button class="btn btn-primary" onclick="submitPasswordChange(true)">Change Password & Continue</button>
+    `;
+
+    // Remove close button for forced change
+    document.querySelector('.modal-close').style.display = 'none';
+    openModal();
+
+    // Prevent closing by clicking overlay
+    document.getElementById('modalOverlay').onclick = null;
+}
+
+// Show regular password change modal (can be closed)
+function showChangePasswordModal() {
+    document.getElementById('modalTitle').textContent = '🔐 Change Password';
+    document.getElementById('modalBody').innerHTML = `
+        <form id="changePasswordForm">
+            <div class="form-group">
+                <label class="form-label">Current Password *</label>
+                <input type="password" class="form-input" name="currentPassword" placeholder="Enter current password" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">New Password *</label>
+                <input type="password" class="form-input" name="newPassword" placeholder="Enter new password (min 6 characters)" required minlength="6">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Confirm New Password *</label>
+                <input type="password" class="form-input" name="confirmPassword" placeholder="Confirm new password" required>
+            </div>
+        </form>
+    `;
+    document.getElementById('modalFooter').innerHTML = `
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitPasswordChange(false)">Change Password</button>
+    `;
+
+    // Restore close button
+    document.querySelector('.modal-close').style.display = '';
+    openModal();
+}
+
+// Submit password change
+async function submitPasswordChange(isForced) {
+    const form = document.getElementById(isForced ? 'forcePasswordForm' : 'changePasswordForm');
+    const currentPassword = form.currentPassword.value;
+    const newPassword = form.newPassword.value;
+    const confirmPassword = form.confirmPassword.value;
+
+    if (!currentPassword || !newPassword || !confirmPassword) {
+        showToast('Please fill in all fields', 'error');
+        return;
+    }
+
+    if (newPassword.length < 6) {
+        showToast('New password must be at least 6 characters', 'error');
+        return;
+    }
+
+    if (newPassword !== confirmPassword) {
+        showToast('New passwords do not match', 'error');
+        return;
+    }
+
+    try {
+        await apiCall('/api/auth/change-password', {
+            method: 'POST',
+            body: JSON.stringify({ currentPassword, newPassword })
+        });
+
+        // Update local user data
+        currentUser.must_change_password = false;
+        localStorage.setItem('user', JSON.stringify(currentUser));
+
+        showToast('Password changed successfully!', 'success');
+        closeModal();
+
+        // Restore modal close functionality
+        document.querySelector('.modal-close').style.display = '';
+        document.getElementById('modalOverlay').onclick = (e) => {
+            if (e.target === document.getElementById('modalOverlay')) {
+                closeModal();
+            }
+        };
+
+        if (isForced) {
+            // Now load the dashboard
+            await loadInitialData();
+            navigateTo('dashboard');
+        }
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}

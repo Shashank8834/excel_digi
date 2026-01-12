@@ -7,6 +7,7 @@ CREATE TABLE IF NOT EXISTS users (
     email TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'team_member')),
+    must_change_password INTEGER DEFAULT 1, -- Force password change on first login
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 

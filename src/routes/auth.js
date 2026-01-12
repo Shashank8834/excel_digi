@@ -34,7 +34,8 @@ router.post('/login', (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                team_id: user.team_id
+                team_id: user.team_id,
+                must_change_password: user.must_change_password === 1
             }
         });
     } catch (error) {
@@ -65,6 +66,10 @@ router.post('/change-password', authenticateToken, (req, res) => {
     try {
         const { currentPassword, newPassword } = req.body;
 
+        if (!newPassword || newPassword.length < 6) {
+            return res.status(400).json({ error: 'New password must be at least 6 characters' });
+        }
+
         const user = db.prepare('SELECT password_hash FROM users WHERE id = ?').get(req.user.id);
 
         if (!bcrypt.compareSync(currentPassword, user.password_hash)) {
@@ -72,7 +77,7 @@ router.post('/change-password', authenticateToken, (req, res) => {
         }
 
         const newHash = bcrypt.hashSync(newPassword, 10);
-        db.prepare('UPDATE users SET password_hash = ? WHERE id = ?').run(newHash, req.user.id);
+        db.prepare('UPDATE users SET password_hash = ?, must_change_password = 0 WHERE id = ?').run(newHash, req.user.id);
 
         res.json({ message: 'Password changed successfully' });
     } catch (error) {

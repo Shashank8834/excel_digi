@@ -118,13 +118,13 @@ function seedDemoData() {
         return;
     }
 
-    // Create only the admin user - password: "password123"
-    const passwordHash = bcrypt.hashSync('password123', 10);
-    db.run('INSERT INTO users (name, email, password_hash, role) VALUES (?, ?, ?, ?)',
-        ['Admin', 'manager@company.com', passwordHash, 'admin']);
+    // Create only the admin user - password: "BCLindia2026@#"
+    const passwordHash = bcrypt.hashSync('BCLindia2026@#', 10);
+    db.run('INSERT INTO users (name, email, password_hash, role, must_change_password) VALUES (?, ?, ?, ?, ?)',
+        ['Admin', 'admin@bcl.in', passwordHash, 'admin', 0]);
 
     saveDatabase();
-    console.log('Admin user created: manager@company.com / password123');
+    console.log('Admin user created: admin@bcl.in / BCLindia2026@#');
 }
 
 module.exports = { db: dbWrapper, initializeDatabase, seedDemoData, initDatabase };
