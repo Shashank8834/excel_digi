@@ -397,38 +397,92 @@ async function loadCompanyInsights(clientId, container) {
         if (riskScore > 60) { riskColor = '#ef4444'; riskLabel = 'High'; }
         else if (riskScore > 30) { riskColor = '#fbbf24'; riskLabel = 'Medium'; }
 
+        const chartId = `company-chart-${clientId}`;
+
         container.innerHTML = `
-            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
-                <div style="padding: 0.5rem 1rem; background: linear-gradient(135deg, ${riskColor}22, ${riskColor}11); border: 1px solid ${riskColor}44; border-radius: 8px; min-width: 100px;">
-                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
-                        <span style="font-size: 0.8rem;">⚠️ Risk</span>
-                        <span style="font-size: 1.25rem; font-weight: 700; color: ${riskColor};">${riskScore}</span>
-                    </div>
-                    <div style="font-size: 0.7rem; color: ${riskColor};">${riskLabel}</div>
+            <div style="display: grid; grid-template-columns: 1fr auto; gap: 1rem; align-items: start;">
+                <div style="height: 180px;">
+                    <canvas id="${chartId}"></canvas>
                 </div>
-                <div style="display: flex; gap: 0.75rem;">
-                    <div style="text-align: center;">
-                        <div style="font-weight: 600;">${totalEmails}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">Emails</div>
+                <div style="display: flex; flex-direction: column; gap: 0.5rem; min-width: 100px;">
+                    <div style="padding: 0.5rem; background: linear-gradient(135deg, ${riskColor}22, ${riskColor}11); border: 1px solid ${riskColor}44; border-radius: 6px; text-align: center;">
+                        <div style="font-size: 1.25rem; font-weight: 700; color: ${riskColor};">${riskScore}</div>
+                        <div style="font-size: 0.65rem; color: ${riskColor};">⚠️ ${riskLabel} Risk</div>
                     </div>
-                    <div style="text-align: center;">
-                        <div style="font-weight: 600;">${complianceData.pending}/${complianceData.total}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">Pending</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-weight: 600; color: #ef4444;">${totalNegative}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">Neg</div>
-                    </div>
-                    <div style="text-align: center;">
-                        <div style="font-weight: 600; color: #22c55e;">${totalPositive}</div>
-                        <div style="font-size: 0.7rem; color: var(--text-muted);">Pos</div>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 0.25rem; font-size: 0.75rem; text-align: center;">
+                        <div style="padding: 0.25rem; background: var(--bg-tertiary); border-radius: 4px;">
+                            <div style="font-weight: 600;">${totalEmails}</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted);">Emails</div>
+                        </div>
+                        <div style="padding: 0.25rem; background: var(--bg-tertiary); border-radius: 4px;">
+                            <div style="font-weight: 600;">${complianceData.pending}/${complianceData.total}</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted);">Pending</div>
+                        </div>
+                        <div style="padding: 0.25rem; background: rgba(239, 68, 68, 0.1); border-radius: 4px;">
+                            <div style="font-weight: 600; color: #ef4444;">${totalNegative}</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted);">Neg</div>
+                        </div>
+                        <div style="padding: 0.25rem; background: rgba(34, 197, 94, 0.1); border-radius: 4px;">
+                            <div style="font-weight: 600; color: #22c55e;">${totalPositive}</div>
+                            <div style="font-size: 0.6rem; color: var(--text-muted);">Pos</div>
+                        </div>
                     </div>
                 </div>
             </div>
         `;
+
+        // Aggregate to monthly and render chart
+        const monthlyData = aggregateByMonth(sentimentData.sentiment);
+        renderCompanyChart(chartId, monthlyData);
     } catch (error) {
         container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">Could not load insights</div>`;
     }
+}
+
+// Render chart for a company in the dashboard
+function renderCompanyChart(canvasId, monthlyData) {
+    const ctx = document.getElementById(canvasId);
+    if (!ctx) return;
+
+    const labels = monthlyData.map(d => d.label);
+    const totalEmails = monthlyData.map(d => d.total_emails);
+
+    const sentimentColors = {
+        'Negative': '#ef4444',
+        'Neutral': '#fbbf24',
+        'Positive': '#22c55e'
+    };
+    const pointColors = monthlyData.map(d => sentimentColors[d.dominant_sentiment]);
+
+    new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels: labels,
+            datasets: [{
+                label: 'Emails',
+                data: totalEmails,
+                borderColor: '#888888',
+                backgroundColor: 'rgba(136, 136, 136, 0.1)',
+                fill: true,
+                tension: 0.4,
+                pointRadius: 8,
+                pointHoverRadius: 10,
+                pointBackgroundColor: pointColors,
+                pointBorderColor: '#ffffff',
+                pointBorderWidth: 2,
+                borderWidth: 2
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: { legend: { display: false } },
+            scales: {
+                x: { display: true, ticks: { font: { size: 9 } } },
+                y: { beginAtZero: true, ticks: { font: { size: 9 } } }
+            }
+        }
+    });
 }
 
 
