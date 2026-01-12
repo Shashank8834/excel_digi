@@ -1632,6 +1632,7 @@ async function editUser(id) {
     try {
         const users = await apiCall('/api/users');
         const user = users.find(u => u.id === id);
+        const isSelf = id === currentUser.id;
 
         document.getElementById('modalTitle').textContent = 'Edit User';
         document.getElementById('modalBody').innerHTML = `
@@ -1649,22 +1650,25 @@ async function editUser(id) {
                     <input type="password" class="form-input" name="password">
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Role *</label>
-                    <select class="form-select" name="role" required>
+                    <label class="form-label">Role *${isSelf ? ' <span style="color: var(--text-muted); font-weight: normal;">(cannot change own role)</span>' : ''}</label>
+                    <select class="form-select" name="role" required ${isSelf ? 'disabled' : ''}>
                         <option value="team_member" ${user.role === 'team_member' ? 'selected' : ''}>Team Member</option>
                         <option value="manager" ${user.role === 'manager' ? 'selected' : ''}>Manager</option>
                         <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
                     </select>
+                    ${isSelf ? `<input type="hidden" name="role_original" value="${user.role}">` : ''}
                 </div>
             </form>
         `;
 
         document.getElementById('modalSubmit').onclick = async () => {
             const form = document.getElementById('userForm');
+            // If editing self, use original role (prevent self role change)
+            const roleValue = isSelf ? user.role : form.role.value;
             const data = {
                 name: form.name.value,
                 email: form.email.value,
-                role: form.role.value
+                role: roleValue
             };
 
             if (form.password.value) {
