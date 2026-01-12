@@ -1771,14 +1771,56 @@ let setupYear, setupMonth;
 
 async function loadMonthSetup() {
     try {
-        // Load extensions data (admin only)
-        const extensionData = await apiCall('/api/status/extensions');
+        // Load extensions data and monthly overrides
+        const [extensionData, monthlyOverrides] = await Promise.all([
+            apiCall('/api/status/extensions'),
+            apiCall(`/api/compliances/overrides/${currentYear}/${currentMonth}`)
+        ]);
+
+        // Create lookup for existing overrides
+        const overrideLookup = {};
+        monthlyOverrides.forEach(o => overrideLookup[o.compliance_id] = o.custom_deadline_day);
 
         document.getElementById('monthSetupContent').innerHTML = `
-            <h2 style="margin-bottom: 1rem;">Compliance Extensions</h2>
-            <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1.5rem;">
-                Set extension days for compliances. These extensions become the default deadline for all future months until changed.
-            </p>
+            <h2 style="margin-bottom: 1rem;">Month Setup - ${getMonthName(currentMonth)} ${currentYear}</h2>
+            
+            <!-- Monthly Deadline Overrides Section -->
+            <div style="background: var(--bg-secondary); border: 1px solid #fbbf24; padding: 1.5rem; margin-bottom: 1.5rem; border-radius: 8px;">
+                <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1rem;">
+                    <h3 style="color: #fbbf24;">📅 Deadline Overrides for ${getMonthName(currentMonth)}</h3>
+                    <button class="btn btn-primary btn-sm" onclick="saveMonthlyOverrides()">💾 Save Overrides</button>
+                </div>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                    Set custom deadline days for this month only (e.g., use 28 for Feb instead of 31). Leave blank to use default.
+                </p>
+                <table class="matrix-table" style="width: 100%;">
+                    <thead>
+                        <tr>
+                            <th>Compliance</th>
+                            <th>Law Group</th>
+                            <th style="width: 100px;">Default</th>
+                            <th style="width: 140px;">${getMonthName(currentMonth)} Deadline</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${extensionData.compliances.filter(c => c.default_deadline >= 28).map(c => `
+                            <tr>
+                                <td>${escapeHtml(c.name)}</td>
+                                <td style="color: var(--text-muted);">${escapeHtml(c.law_group_name)}</td>
+                                <td style="text-align: center;">${c.default_deadline || '-'}</td>
+                                <td>
+                                    <input type="number" class="form-input monthly-override-input" 
+                                           data-compliance-id="${c.id}" 
+                                           min="1" max="31" 
+                                           value="${overrideLookup[c.id] || ''}"
+                                           placeholder="${c.default_deadline || 'Day'}"
+                                           style="width: 80px; padding: 0.3rem; text-align: center;">
+                                </td>
+                            </tr>
+                        `).join('')}
+                    </tbody>
+                </table>
+            </div>
             
             <!-- Add Temporary Compliance Section -->
             <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 1.5rem; margin-bottom: 1.5rem;">
@@ -1793,7 +1835,10 @@ async function loadMonthSetup() {
             
             <!-- Extensions Section -->
             <div style="background: var(--bg-secondary); border: 1px solid var(--border-color); padding: 1.5rem;">
-                <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">Extensions</h3>
+                <h3 style="margin-bottom: 1rem; color: var(--text-secondary);">Default Extensions (Permanent)</h3>
+                <p style="font-size: 0.85rem; color: var(--text-muted); margin-bottom: 1rem;">
+                    These extensions become the default deadline for all future months until changed.
+                </p>
                 <table class="matrix-table" style="width: 100%;">
                     <thead>
                         <tr>
@@ -1823,12 +1868,49 @@ async function loadMonthSetup() {
                 </table>
             </div>
         `;
+
     } catch (error) {
         document.getElementById('monthSetupContent').innerHTML = `
             <div style="color: var(--urgency-overdue); padding: 2rem; text-align: center;">
                 Failed to load: ${error.message}
             </div>
         `;
+    }
+}
+
+// Save monthly deadline overrides for current month
+async function saveMonthlyOverrides() {
+    try {
+        const inputs = document.querySelectorAll('.monthly-override-input');
+        let saved = 0;
+
+        for (const input of inputs) {
+            const complianceId = input.dataset.complianceId;
+            const value = input.value.trim();
+
+            if (value) {
+                await apiCall('/api/compliances/overrides', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                        compliance_id: parseInt(complianceId),
+                        period_year: currentYear,
+                        period_month: currentMonth,
+                        custom_deadline_day: parseInt(value)
+                    })
+                });
+                saved++;
+            } else {
+                // Remove override if blank
+                await apiCall(`/api/compliances/overrides/${complianceId}/${currentYear}/${currentMonth}`, {
+                    method: 'DELETE'
+                });
+            }
+        }
+
+        showToast(`Monthly overrides saved for ${getMonthName(currentMonth)}`, 'success');
+        loadMonthSetup();
+    } catch (error) {
+        showToast('Failed to save overrides: ' + error.message, 'error');
     }
 }
 
