@@ -293,6 +293,9 @@ async function loadDashboard() {
                         </div>
                     </div>
                     <div class="company-deadlines collapsed" id="deadlines-${company.client_id}">
+                        <div class="company-insights" id="insights-${company.client_id}" style="padding: 1rem; border-bottom: 1px solid var(--border-color);">
+                            <div style="text-align: center; padding: 1rem;"><div class="loading-spinner"></div></div>
+                        </div>
                         <table class="matrix-table">
                             <thead>
                                 <tr>
@@ -350,13 +353,81 @@ async function loadDashboard() {
 function toggleCompanySection(companyId) {
     const deadlinesEl = document.getElementById(`deadlines-${companyId}`);
     const toggleIcon = document.getElementById(`toggle-icon-${companyId}`);
+    const insightsEl = document.getElementById(`insights-${companyId}`);
 
     if (deadlinesEl.classList.contains('collapsed')) {
         deadlinesEl.classList.remove('collapsed');
         toggleIcon.textContent = '▼';
+        // Load insights for this client
+        if (insightsEl && !insightsEl.dataset.loaded) {
+            loadCompanyInsights(companyId, insightsEl);
+            insightsEl.dataset.loaded = 'true';
+        }
     } else {
         deadlinesEl.classList.add('collapsed');
         toggleIcon.textContent = '▶';
+    }
+}
+
+// Load insights for a specific company in the dashboard
+async function loadCompanyInsights(clientId, container) {
+    try {
+        const [sentimentData, complianceData] = await Promise.all([
+            apiCall(`/api/insights/sentiment/${clientId}`),
+            apiCall(`/api/insights/compliance/${clientId}`)
+        ]);
+
+        if (!sentimentData.hasData) {
+            container.innerHTML = `<div style="text-align: center; color: var(--text-muted); padding: 0.5rem;">No email data available</div>`;
+            return;
+        }
+
+        // Calculate totals
+        const totalEmails = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.total_emails), 0);
+        const totalNegative = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.negative_count), 0);
+        const totalPositive = sentimentData.sentiment.reduce((sum, d) => sum + parseInt(d.positive_count || 0), 0);
+
+        // Calculate risk score
+        const negativePercent = totalEmails > 0 ? (totalNegative / totalEmails) * 100 : 0;
+        const pendingPercent = complianceData.total > 0 ? (complianceData.pending / complianceData.total) * 100 : 0;
+        const riskScore = Math.round((pendingPercent * 0.5) + (negativePercent * 0.5));
+
+        let riskColor = '#22c55e';
+        let riskLabel = 'Low';
+        if (riskScore > 60) { riskColor = '#ef4444'; riskLabel = 'High'; }
+        else if (riskScore > 30) { riskColor = '#fbbf24'; riskLabel = 'Medium'; }
+
+        container.innerHTML = `
+            <div style="display: flex; gap: 1rem; flex-wrap: wrap; align-items: center;">
+                <div style="padding: 0.5rem 1rem; background: linear-gradient(135deg, ${riskColor}22, ${riskColor}11); border: 1px solid ${riskColor}44; border-radius: 8px; min-width: 100px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem;">
+                        <span style="font-size: 0.8rem;">⚠️ Risk</span>
+                        <span style="font-size: 1.25rem; font-weight: 700; color: ${riskColor};">${riskScore}</span>
+                    </div>
+                    <div style="font-size: 0.7rem; color: ${riskColor};">${riskLabel}</div>
+                </div>
+                <div style="display: flex; gap: 0.75rem;">
+                    <div style="text-align: center;">
+                        <div style="font-weight: 600;">${totalEmails}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Emails</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-weight: 600;">${complianceData.pending}/${complianceData.total}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Pending</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-weight: 600; color: #ef4444;">${totalNegative}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Neg</div>
+                    </div>
+                    <div style="text-align: center;">
+                        <div style="font-weight: 600; color: #22c55e;">${totalPositive}</div>
+                        <div style="font-size: 0.7rem; color: var(--text-muted);">Pos</div>
+                    </div>
+                </div>
+            </div>
+        `;
+    } catch (error) {
+        container.innerHTML = `<div style="color: var(--text-muted); font-size: 0.85rem;">Could not load insights</div>`;
     }
 }
 
