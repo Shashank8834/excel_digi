@@ -2112,17 +2112,31 @@ async function saveMonthlyDeadlines() {
 // ===== MODAL HELPERS =====
 function openModal() {
     document.getElementById('modalOverlay').classList.add('active');
-    // Reset footer to default if needed
+    // Always reset footer to default with Save button
+    const footer = document.getElementById('modalFooter');
     if (!document.getElementById('modalSubmit')) {
-        document.getElementById('modalFooter').innerHTML = `
+        footer.innerHTML = `
             <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
             <button class="btn btn-primary" id="modalSubmit">Save</button>
         `;
+    }
+    // Show the submit button by default (some modals hide it)
+    const submitBtn = document.getElementById('modalSubmit');
+    if (submitBtn) {
+        submitBtn.style.display = '';
     }
 }
 
 function closeModal() {
     document.getElementById('modalOverlay').classList.remove('active');
+    // Reset footer to default state for next modal
+    document.getElementById('modalFooter').innerHTML = `
+        <button class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" id="modalSubmit">Save</button>
+    `;
+    // Reset modal close button visibility
+    const closeBtn = document.querySelector('.modal-close');
+    if (closeBtn) closeBtn.style.display = '';
 }
 
 // Close modal on overlay click
