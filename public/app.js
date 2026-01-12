@@ -326,6 +326,13 @@ async function loadDashboard() {
                                                     onclick="quickUpdateStatus(${item.client_id}, ${item.compliance_id}, 'done')">
                                                 Mark Done
                                             </button>
+                                            ${item.urgency === 'overdue' && item.channel_mail ? `
+                                                <button class="btn btn-sm btn-secondary" 
+                                                        onclick="sendOverdueEmail('${escapeHtml(item.channel_mail)}', '${escapeHtml(item.client_name)}', '${escapeHtml(item.compliance_name)}')"
+                                                        title="Send overdue email to ${escapeHtml(item.channel_mail)}">
+                                                    📧
+                                                </button>
+                                            ` : ''}
                                         </td>
                                     </tr>
                                 `).join('')}
@@ -2390,17 +2397,17 @@ function showInstructionManual(complianceId, complianceName) {
         });
 }
 
-// Show compliance instructions in matrix sidebar
+// Show compliance instructions in a modal popup
 function showComplianceInstructions(complianceId, complianceName) {
-    const sidebar = document.getElementById('matrixSidebar');
-
-    sidebar.innerHTML = `
-        <div class="calendar-sidebar-header">Loading...</div>
-    `;
+    // Show loading state in modal
+    document.getElementById('modalTitle').textContent = `Instructions: ${complianceName}`;
+    document.getElementById('modalBody').innerHTML = '<div style="text-align: center; padding: 2rem;"><div class="loading-spinner"></div><p>Loading instructions...</p></div>';
+    document.getElementById('modalFooter').innerHTML = '<button class="btn btn-secondary" onclick="closeModal()">Close</button>';
+    openModal();
 
     apiCall(`/api/compliances/${complianceId}`)
         .then(compliance => {
-            let content = `<div class="calendar-sidebar-header">${escapeHtml(complianceName)}</div>`;
+            let content = '';
 
             if (compliance.instruction_video_url) {
                 // Convert YouTube URL to embed format
@@ -2421,29 +2428,31 @@ function showComplianceInstructions(complianceId, complianceName) {
             }
 
             if (compliance.instruction_text) {
-                content += `<div class="instruction-text">${escapeHtml(compliance.instruction_text)}</div>`;
+                content += `<div class="instruction-text" style="white-space: pre-wrap; padding: 1rem; background: var(--bg-secondary); border-radius: 8px; margin-bottom: 1rem;">${escapeHtml(compliance.instruction_text)}</div>`;
             }
 
             if (!compliance.instruction_video_url && !compliance.instruction_text) {
-                content += '<div class="calendar-sidebar-empty">No instructions available for this compliance.</div>';
+                content = '<div style="text-align: center; padding: 2rem; color: var(--text-muted);"><p>No instructions available for this compliance.</p><p style="font-size: 0.85rem;">Contact an admin to add instructions.</p></div>';
             }
 
-            // Add close button and deadline info
+            // Add deadline info
             content += `
-                <div style="margin-top: 1rem; padding-top: 0.5rem; border-top: 1px solid var(--border-color); font-size: 0.85rem; color: var(--text-muted);">
-                    <strong>Deadline:</strong> Day ${compliance.deadline_day || 'Not set'}
+                <div style="margin-top: 1rem; padding: 0.75rem; background: var(--bg-tertiary); border-radius: 8px; font-size: 0.85rem;">
+                    <strong>📅 Deadline:</strong> Day ${compliance.deadline_day || 'Not set'}
                     ${compliance.deadline_month ? ` / Month ${compliance.deadline_month}` : ''}
-                    <br>
-                    <strong>Frequency:</strong> ${compliance.frequency}
+                    &nbsp;&nbsp;|&nbsp;&nbsp;
+                    <strong>🔄 Frequency:</strong> ${compliance.frequency || 'Monthly'}
                 </div>
             `;
 
-            sidebar.innerHTML = content;
+            document.getElementById('modalBody').innerHTML = content;
         })
         .catch(err => {
-            sidebar.innerHTML = `
-                <div class="calendar-sidebar-header">${escapeHtml(complianceName)}</div>
-                <div class="calendar-sidebar-empty" style="color: var(--urgency-overdue);">Failed to load: ${escapeHtml(err.message)}</div>
+            document.getElementById('modalBody').innerHTML = `
+                <div style="text-align: center; padding: 2rem; color: var(--urgency-overdue);">
+                    <p>Failed to load instructions</p>
+                    <p style="font-size: 0.85rem;">${escapeHtml(err.message)}</p>
+                </div>
             `;
         });
 }

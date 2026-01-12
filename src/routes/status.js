@@ -195,6 +195,7 @@ router.get('/deadlines', authenticateToken, (req, res) => {
             SELECT 
                 c.id as client_id, 
                 c.name as client_name,
+                c.channel_mail,
                 comp.id as compliance_id,
                 comp.name as compliance_name,
                 COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day) as deadline_day,
