@@ -3376,13 +3376,17 @@ function showForcePasswordChangeModal() {
             </div>
         </form>
     `;
-    document.getElementById('modalFooter').innerHTML = `
-        <button class="btn btn-primary" onclick="submitPasswordChange(true)">Change Password & Continue</button>
-    `;
 
     // Remove close button for forced change
     document.querySelector('.modal-close').style.display = 'none';
+
+    // Open modal FIRST (before setting custom footer, since openModal resets footer if modalSubmit doesn't exist)
     openModal();
+
+    // Now set custom footer AFTER openModal (so it doesn't get overwritten)
+    document.getElementById('modalFooter').innerHTML = `
+        <button class="btn btn-primary" onclick="submitPasswordChange(true)">Change Password & Continue</button>
+    `;
 
     // Prevent closing by clicking overlay
     document.getElementById('modalOverlay').onclick = null;
