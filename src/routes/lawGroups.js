@@ -100,9 +100,9 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
 // Delete law group (manager only)
 router.delete('/:id', authenticateToken, requireManager, (req, res) => {
     try {
-        // Check if there are compliances under this law group
+        // Check if there are ACTIVE compliances under this law group
         const count = db.prepare(`
-            SELECT COUNT(*) as count FROM compliances WHERE law_group_id = ?
+            SELECT COUNT(*) as count FROM compliances WHERE law_group_id = ? AND is_active = 1
         `).get(req.params.id);
 
         if (count.count > 0) {
