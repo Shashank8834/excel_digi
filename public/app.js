@@ -1117,6 +1117,7 @@ async function loadLawGroups() {
                                 </div>
                                 <div class="admin-list-item-actions">
                                     <button class="btn btn-sm btn-secondary" onclick="editCompliance(${c.id})">Edit</button>
+                                    <button class="btn btn-sm btn-secondary" onclick="deleteCompliance(${c.id})" style="color: var(--urgency-overdue);">Delete</button>
                                 </div>
                             </div>
                         `).join('')}
@@ -1403,6 +1404,18 @@ async function editCompliance(id) {
     }
 }
 
+async function deleteCompliance(id) {
+    if (!confirm('Are you sure you want to delete this compliance? This will remove all status tracking data for this compliance.')) return;
+
+    try {
+        await apiCall(`/api/compliances/${id}`, { method: 'DELETE' });
+        showToast('Compliance deleted successfully', 'success');
+        loadLawGroups();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
 // ===== TEAMS MANAGEMENT =====
 async function loadTeams() {
     try {
@@ -1427,6 +1440,7 @@ async function loadTeams() {
                             <td>
                                 <button class="btn btn-sm btn-secondary" onclick="viewTeam(${t.id})">View</button>
                                 <button class="btn btn-sm btn-secondary" onclick="editTeam(${t.id})">Edit</button>
+                                <button class="btn btn-sm btn-secondary" onclick="deleteTeam(${t.id})" style="color: var(--urgency-overdue);">Delete</button>
                             </td>
                         </tr>
                     `).join('')}
@@ -1596,6 +1610,18 @@ async function editTeam(id) {
         };
 
         openModal();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+async function deleteTeam(id) {
+    if (!confirm('Are you sure you want to delete this team? Team members will remain but will be unassigned from the team.')) return;
+
+    try {
+        await apiCall(`/api/teams/${id}`, { method: 'DELETE' });
+        showToast('Team deleted successfully', 'success');
+        loadTeams();
     } catch (error) {
         showToast(error.message, 'error');
     }
