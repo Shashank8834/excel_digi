@@ -1093,9 +1093,15 @@ async function loadLawGroups() {
                 <div class="admin-card">
                     <div class="admin-card-header">
                         <span class="admin-card-title">${escapeHtml(lg.name)}</span>
-                        <div>
+                        <div style="display: flex; gap: 0.5rem;">
                             <button class="btn btn-sm btn-secondary" onclick="addCompliance(${lg.id}, '${escapeHtml(lg.name)}')">
                                 + Add Compliance
+                            </button>
+                            <button class="btn btn-sm btn-secondary" onclick="editLawGroup(${lg.id})">
+                                Edit
+                            </button>
+                            <button class="btn btn-sm btn-secondary" onclick="deleteLawGroup(${lg.id})" style="color: var(--urgency-overdue);">
+                                Delete
                             </button>
                         </div>
                     </div>
@@ -1174,6 +1180,74 @@ function showAddLawGroupModal() {
     };
 
     openModal();
+}
+
+async function editLawGroup(id) {
+    try {
+        const lawGroup = await apiCall(`/api/law-groups/${id}`);
+
+        document.getElementById('modalTitle').textContent = 'Edit Law Group';
+        document.getElementById('modalBody').innerHTML = `
+            <form id="lawGroupForm">
+                <div class="form-group">
+                    <label class="form-label">Law Group Name *</label>
+                    <input type="text" class="form-input" name="name" value="${escapeHtml(lawGroup.name)}" required>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Description</label>
+                    <textarea class="form-textarea" name="description">${escapeHtml(lawGroup.description || '')}</textarea>
+                </div>
+                <div class="form-group">
+                    <label class="form-label">Display Order</label>
+                    <input type="number" class="form-input" name="display_order" value="${lawGroup.display_order || 0}">
+                </div>
+                <div class="form-group">
+                    <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                        <input type="checkbox" name="manager_only" style="width: auto;" ${lawGroup.manager_only ? 'checked' : ''}>
+                        <span class="form-label" style="margin: 0;">Manager/Admin Only</span>
+                    </label>
+                    <small style="color: var(--text-muted);">Only managers and admins can update statuses for compliances in this law group</small>
+                </div>
+            </form>
+        `;
+
+        document.getElementById('modalSubmit').onclick = async () => {
+            const form = document.getElementById('lawGroupForm');
+            const data = {
+                name: form.name.value,
+                description: form.description.value,
+                display_order: parseInt(form.display_order.value) || 0,
+                manager_only: form.manager_only.checked
+            };
+
+            try {
+                await apiCall(`/api/law-groups/${id}`, { method: 'PUT', body: JSON.stringify(data) });
+                showToast('Law group updated successfully', 'success');
+                closeModal();
+                loadLawGroups();
+                loadInitialData(); // Refresh cached law groups
+            } catch (error) {
+                showToast(error.message, 'error');
+            }
+        };
+
+        openModal();
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+async function deleteLawGroup(id) {
+    if (!confirm('Are you sure you want to delete this law group? You must delete all compliances under it first.')) return;
+
+    try {
+        await apiCall(`/api/law-groups/${id}`, { method: 'DELETE' });
+        showToast('Law group deleted successfully', 'success');
+        loadLawGroups();
+        loadInitialData(); // Refresh cached law groups
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
 }
 
 
