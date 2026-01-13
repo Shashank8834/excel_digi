@@ -49,6 +49,7 @@ CREATE TABLE IF NOT EXISTS law_groups (
     name TEXT NOT NULL UNIQUE,
     description TEXT,
     display_order INTEGER DEFAULT 0,
+    manager_only INTEGER DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -75,6 +76,9 @@ CREATE TABLE IF NOT EXISTS compliances (
     manager_only INTEGER DEFAULT 0, -- Only admin/manager can edit
     instruction_video_url TEXT, -- YouTube video URL for instructions
     instruction_text TEXT, -- Text instructions
+    is_temporary INTEGER DEFAULT 0, -- Temporary compliance for specific month only
+    temp_month INTEGER, -- Month for temporary compliance
+    temp_year INTEGER, -- Year for temporary compliance
     display_order INTEGER DEFAULT 0,
     is_active INTEGER DEFAULT 1,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
