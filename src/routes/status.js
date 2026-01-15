@@ -295,8 +295,9 @@ router.get('/summary', authenticateToken, (req, res) => {
                 AND comp.id = ccs.compliance_id
                 AND ccs.period_year = ?
                 AND ccs.period_month = ?
-            ${clientFilter}
-            AND c.is_active = 1 AND comp.is_active = 1
+            WHERE c.is_active = 1 AND comp.is_active = 1
+            AND (comp.is_temporary = 0 OR (comp.is_temporary = 1 AND comp.temp_month = ${periodMonth} AND comp.temp_year = ${periodYear}))
+            ${clientFilter ? 'AND ' + clientFilter.replace('WHERE', '') : ''}
         `).get(...params);
 
         res.json({
