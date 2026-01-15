@@ -175,7 +175,7 @@ router.get('/compliance/:clientId', authenticateToken, (req, res) => {
         const compliance = monthlyStats.map(row => ({
             ...row,
             overdue: overdueLookup[`${row.period_year}-${row.period_month}`] || 0,
-            completion_rate: row.total > 0 ? ((row.completed / (row.total - row.not_applicable)) * 100).toFixed(1) : 0
+            completion_rate: (row.total - row.not_applicable) > 0 ? ((row.completed / (row.total - row.not_applicable)) * 100).toFixed(1) : 0
         }));
 
         // Calculate totals for risk score
@@ -228,7 +228,7 @@ router.get('/correlation/:clientId', authenticateToken, async (req, res) => {
             client: client.name,
             domain: client.email_domain,
             months: [],
-            hassentimentData: false
+            hasSentimentData: false
         };
 
         // If email domain is set, get sentiment data

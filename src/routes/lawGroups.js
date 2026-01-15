@@ -63,7 +63,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 
         const result = db.prepare(`
             INSERT INTO law_groups (name, description, display_order, manager_only) VALUES (?, ?, ?, ?)
-        `).run(name, description, display_order || 0, manager_only ? 1 : 0);
+        `).run(name, description || null, display_order || 0, manager_only ? 1 : 0);
 
         res.status(201).json({
             id: result.lastInsertRowid,
@@ -87,7 +87,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
         db.prepare(`
             UPDATE law_groups SET name = ?, description = ?, display_order = ?, manager_only = ?
             WHERE id = ?
-        `).run(name, description, display_order || 0, manager_only ? 1 : 0, req.params.id);
+        `).run(name, description || null, display_order || 0, manager_only ? 1 : 0, req.params.id);
 
         res.json({ message: 'Law group updated successfully' });
     } catch (error) {

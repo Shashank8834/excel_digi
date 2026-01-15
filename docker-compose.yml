@@ -13,6 +13,7 @@ services:
     environment:
       - NODE_ENV=production
       - PORT=3000
+      - JWT_SECRET=BCL-Compliance-Tracker-Secure-Key-X9f2kLm8nP3qR7sT
       # Connect to Email Sentiment PostgreSQL database for insights
       - SENTIMENT_DB_HOST=email_postgres
       - SENTIMENT_DB_PORT=5432

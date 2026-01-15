@@ -97,7 +97,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 
         const result = db.prepare(`
             INSERT INTO clients (name, industry, notes, channel_mail, email_domain) VALUES (?, ?, ?, ?, ?)
-        `).run(name, industry, notes, channel_mail || null, email_domain || null);
+        `).run(name, industry || null, notes || null, channel_mail || null, email_domain || null);
 
         // Assign to users if specified
         if (user_ids && user_ids.length > 0) {
@@ -137,7 +137,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
         db.prepare(`
             UPDATE clients SET name = ?, industry = ?, notes = ?, channel_mail = ?, email_domain = ?, is_active = ?
             WHERE id = ?
-        `).run(name, industry, notes, channel_mail || null, email_domain || null, is_active ?? 1, req.params.id);
+        `).run(name, industry || null, notes || null, channel_mail || null, email_domain || null, is_active ?? 1, req.params.id);
 
         // Update user assignments if provided
         if (user_ids !== undefined) {

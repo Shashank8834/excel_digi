@@ -93,7 +93,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
                 deadline_month = ?, frequency = ?, display_order = ?, is_active = ?,
                 manager_only = ?, instruction_video_url = ?, instruction_text = ?
             WHERE id = ?
-        `).run(law_group_id, name, description, deadline_day, deadline_month, frequency,
+        `).run(law_group_id, name, description || null, deadline_day || null, deadline_month || null, frequency,
             display_order || 0, is_active ?? 1, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null, req.params.id);
 
         res.json({ message: 'Compliance updated successfully' });
