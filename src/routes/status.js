@@ -119,7 +119,7 @@ router.get('/matrix', authenticateToken, (req, res) => {
 // Update status for a client-compliance pair
 router.post('/update', authenticateToken, (req, res) => {
     try {
-        const { client_id, compliance_id, year, month, status } = req.body;
+        const { client_id, compliance_id, year, month, status, source } = req.body;
         const notes = req.body.notes || null;
 
         if (!client_id || !compliance_id || !status) {
@@ -132,6 +132,11 @@ router.post('/update', authenticateToken, (req, res) => {
 
         const periodYear = parseInt(year) || new Date().getFullYear();
         const periodMonth = parseInt(month) || new Date().getMonth() + 1;
+
+        // Team members can only update via calendar, not matrix
+        if (req.user.role === 'team_member' && source !== 'calendar') {
+            return res.status(403).json({ error: 'Team members can only update status from the Calendar page' });
+        }
 
         // Check if team member has access to this client
         if (req.user.role !== 'admin' && req.user.role !== 'manager') {

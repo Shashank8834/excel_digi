@@ -747,7 +747,8 @@ async function updateStatus(clientId, complianceId, newStatus) {
                 compliance_id: complianceId,
                 year: currentYear,
                 month: currentMonth,
-                status: newStatus
+                status: newStatus,
+                source: 'matrix'
             })
         });
 
@@ -769,7 +770,8 @@ async function quickUpdateStatus(clientId, complianceId, status) {
                 compliance_id: complianceId,
                 year: currentYear,
                 month: currentMonth,
-                status: status
+                status: status,
+                source: 'matrix'
             })
         });
 
@@ -2431,7 +2433,8 @@ async function updateCalendarStatus(clientId, complianceId, status) {
                 compliance_id: complianceId,
                 year: calendarYear,
                 month: calendarMonth,
-                status: status
+                status: status,
+                source: 'calendar'
             })
         });
         showToast('Status updated', 'success');
