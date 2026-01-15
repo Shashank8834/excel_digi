@@ -37,15 +37,20 @@ router.get('/matrix', authenticateToken, (req, res) => {
             SELECT * FROM law_groups ORDER BY display_order, name
         `).all();
 
+        // Get compliances - filter temp ones to only show in their designated month
         const getCompliances = db.prepare(`
             SELECT * FROM compliances 
             WHERE law_group_id = ? AND is_active = 1
+            AND (
+                is_temporary = 0 
+                OR (is_temporary = 1 AND temp_month = ? AND temp_year = ?)
+            )
             ORDER BY display_order, name
         `);
 
         const lawGroupsWithCompliances = lawGroups.map(lg => ({
             ...lg,
-            compliances: getCompliances.all(lg.id)
+            compliances: getCompliances.all(lg.id, periodMonth, periodYear)
         }));
 
         // Get all status entries for this period
@@ -216,6 +221,7 @@ router.get('/deadlines', authenticateToken, (req, res) => {
                 AND mco.period_month = ${currentMonth}
             WHERE c.is_active = 1 
                 AND comp.is_active = 1
+                AND (comp.is_temporary = 0 OR (comp.is_temporary = 1 AND comp.temp_month = ${currentMonth} AND comp.temp_year = ${currentYear}))
                 AND (comp.frequency = 'monthly' OR (comp.frequency = 'yearly' AND comp.deadline_month = ${currentMonth}))
                 AND COALESCE(ccs.status, 'pending') = 'pending'
                 ${clientFilter}
@@ -390,6 +396,7 @@ router.get('/calendar', authenticateToken, (req, res) => {
                 AND mco.period_month = ?
             WHERE c.is_active = 1 
                 AND comp.is_active = 1
+                AND (comp.is_temporary = 0 OR (comp.is_temporary = 1 AND comp.temp_month = ${periodMonth} AND comp.temp_year = ${periodYear}))
                 AND (comp.frequency = 'monthly' OR (comp.frequency = 'yearly' AND comp.deadline_month = ${periodMonth}))
                 ${clientFilter}
             ORDER BY COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day), c.name

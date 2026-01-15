@@ -1641,7 +1641,6 @@ async function loadUsers() {
                         <th>Name</th>
                         <th>Email</th>
                         <th>Role</th>
-                        <th>Team</th>
                         <th>Actions</th>
                     </tr>
                 </thead>
@@ -1660,7 +1659,6 @@ async function loadUsers() {
                                 <td><strong>${escapeHtml(u.name)}</strong></td>
                                 <td>${escapeHtml(u.email)}</td>
                                 <td><span class="status-badge ${u.role === 'admin' ? 'status-na' : u.role === 'manager' ? 'status-done' : 'status-pending'}">${u.role.replace('_', ' ').toUpperCase()}</span></td>
-                                <td>${escapeHtml(u.team_name || 'None')}</td>
                                 <td>
                                     ${canEdit ? `<button class="btn btn-sm btn-secondary" onclick="editUser(${u.id})">Edit</button>` : ''}
                                     ${canDelete ? `<button class="btn btn-sm btn-secondary" onclick="deleteUser(${u.id})" style="color: var(--urgency-overdue);">Delete</button>` : ''}
