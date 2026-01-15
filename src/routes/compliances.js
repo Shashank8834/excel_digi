@@ -69,7 +69,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         const result = db.prepare(`
             INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(law_group_id, name, description, deadline_day, deadline_month, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null, is_temporary ? 1 : 0, temp_month || null, temp_year || null);
+        `).run(law_group_id, name, description || null, deadline_day || null, deadline_month || null, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null, is_temporary ? 1 : 0, temp_month || null, temp_year || null);
 
         res.status(201).json({
             id: result.lastInsertRowid,
