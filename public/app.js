@@ -2306,13 +2306,22 @@ function getMonthName(month) {
 // ===== CALENDAR FUNCTIONS =====
 async function loadCalendar() {
     try {
-        // Populate client filter
-        const clients = await apiCall('/api/clients');
         const clientSelect = document.getElementById('calendarClient');
-        clientSelect.innerHTML = '<option value="">All Clients</option>' +
-            clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+        // Preserve the current selection before repopulating
+        const currentSelection = clientSelect.value;
 
-        clientSelect.onchange = loadCalendar;
+        // Only repopulate dropdown if it's empty (first load)
+        if (clientSelect.options.length <= 1) {
+            const clients = await apiCall('/api/clients');
+            clientSelect.innerHTML = '<option value="">All Clients</option>' +
+                clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
+            clientSelect.onchange = loadCalendar;
+        }
+
+        // Restore selection
+        if (currentSelection) {
+            clientSelect.value = currentSelection;
+        }
 
         // Update month label
         document.getElementById('calendarMonthLabel').textContent =
