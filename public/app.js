@@ -127,8 +127,8 @@ async function loadInitialData() {
         lawGroupSelect.innerHTML = '<option value="">All Law Groups</option>' +
             cachedLawGroups.map(lg => `<option value="${lg.id}">${lg.name}</option>`).join('');
 
-        // Load users for admin
-        if (currentUser.role === 'admin' || currentUser.role === 'manager') {
+        // Load users for admin, manager, and associate_partner
+        if (currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'associate_partner') {
             const usersRes = await apiCall('/api/users');
             cachedUsers = usersRes;
         }
@@ -672,8 +672,8 @@ async function loadMatrix() {
 
                 // Check if client has OneDrive link for this month
                 const hasOnedriveLink = !!row.client.onedrive_link;
-                // Role check: only managers and admins can edit via matrix
-                const isManagerOrAdmin = currentUser.role === 'manager' || currentUser.role === 'admin';
+                // Role check: only managers, associate partners, and admins can edit via matrix
+                const isManagerOrAdmin = currentUser.role === 'manager' || currentUser.role === 'admin' || currentUser.role === 'associate_partner';
                 const canEdit = isEditable && hasOnedriveLink && isManagerOrAdmin;
 
 
