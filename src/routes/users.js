@@ -32,8 +32,8 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
             return res.status(400).json({ error: 'Name, email, and role are required' });
         }
 
-        if (!['admin', 'manager', 'team_member'].includes(role)) {
-            return res.status(400).json({ error: 'Role must be admin, manager, or team_member' });
+        if (!['admin', 'manager', 'team_member', 'associate_partner'].includes(role)) {
+            return res.status(400).json({ error: 'Role must be admin, manager, associate_partner, or team_member' });
         }
 
         // Managers cannot create admin users
@@ -67,8 +67,8 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
         const { name, email, role, password } = req.body;
         const targetUserId = parseInt(req.params.id);
 
-        if (!['admin', 'manager', 'team_member'].includes(role)) {
-            return res.status(400).json({ error: 'Role must be admin, manager, or team_member' });
+        if (!['admin', 'manager', 'team_member', 'associate_partner'].includes(role)) {
+            return res.status(400).json({ error: 'Role must be admin, manager, associate_partner, or team_member' });
         }
 
         // Get the target user to check their role

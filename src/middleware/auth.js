@@ -28,9 +28,17 @@ function requireAdmin(req, res, next) {
     next();
 }
 
-// Middleware to require manager or admin role
+// Middleware to require associate partner, manager or admin role
+function requireAssociatePartner(req, res, next) {
+    if (req.user.role !== 'associate_partner' && req.user.role !== 'manager' && req.user.role !== 'admin') {
+        return res.status(403).json({ error: 'Associate Partner access required' });
+    }
+    next();
+}
+
+// Middleware to require manager, associate partner, or admin role
 function requireManager(req, res, next) {
-    if (req.user.role !== 'manager' && req.user.role !== 'admin') {
+    if (req.user.role !== 'manager' && req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
         return res.status(403).json({ error: 'Manager access required' });
     }
     next();
@@ -45,8 +53,8 @@ function canAccessClient(req, res, next) {
         return next();
     }
 
-    // Admins and managers can access all clients
-    if (req.user.role === 'admin' || req.user.role === 'manager') {
+    // Admins and associate partners can access all clients
+    if (req.user.role === 'admin' || req.user.role === 'associate_partner') {
         return next();
     }
 
@@ -80,6 +88,7 @@ function generateToken(user) {
 module.exports = {
     authenticateToken,
     requireAdmin,
+    requireAssociatePartner,
     requireManager,
     canAccessClient,
     generateToken,

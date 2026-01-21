@@ -56,20 +56,20 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create compliance (manager only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year } = req.body;
+        const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year, applicable_client_ids } = req.body;
 
-        if (!law_group_id || !name || !frequency) {
-            return res.status(400).json({ error: 'Law group, name, and frequency are required' });
+        if (!name || !frequency) {
+            return res.status(400).json({ error: 'Name and frequency are required' });
         }
 
-        if (!['monthly', 'quarterly', 'yearly'].includes(frequency)) {
-            return res.status(400).json({ error: 'Frequency must be monthly, quarterly, or yearly' });
+        if (!['monthly', 'quarterly', 'half_yearly', 'yearly'].includes(frequency)) {
+            return res.status(400).json({ error: 'Frequency must be monthly, quarterly, half_yearly, or yearly' });
         }
 
         const result = db.prepare(`
-            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(law_group_id, name, description || null, deadline_day || null, deadline_month || null, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null, is_temporary ? 1 : 0, temp_month || null, temp_year || null);
+            INSERT INTO compliances (law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year, applicable_client_ids)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(law_group_id || null, name, description || null, deadline_day || null, deadline_month || null, frequency, display_order || 0, manager_only ? 1 : 0, instruction_video_url || null, instruction_text || null, is_temporary ? 1 : 0, temp_month || null, temp_year || null, applicable_client_ids ? JSON.stringify(applicable_client_ids) : null);
 
         res.status(201).json({
             id: result.lastInsertRowid,

@@ -13,8 +13,8 @@ router.get('/matrix', authenticateToken, (req, res) => {
 
         // Get clients based on user role
         let clients;
-        if (req.user.role === 'admin' || req.user.role === 'manager') {
-            // Admins/Managers see all active clients
+        if (req.user.role === 'admin' || req.user.role === 'associate_partner') {
+            // Admins/Associate Partners see all active clients
             clients = db.prepare(`
                 SELECT c.id, c.name, c.industry
                 FROM clients c
@@ -22,7 +22,7 @@ router.get('/matrix', authenticateToken, (req, res) => {
                 ORDER BY c.name
             `).all();
         } else {
-            // Team members see only clients assigned to them
+            // Managers and Team members see only clients assigned to them
             clients = db.prepare(`
                 SELECT c.id, c.name, c.industry
                 FROM clients c
@@ -138,8 +138,8 @@ router.post('/update', authenticateToken, (req, res) => {
             return res.status(403).json({ error: 'Team members can only update status from the Calendar page' });
         }
 
-        // Check if team member has access to this client
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        // Check if team member or manager has access to this client
+        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
             const hasAccess = db.prepare(`
                 SELECT 1 FROM user_client_assignments 
                 WHERE user_id = ? AND client_id = ?
@@ -192,7 +192,7 @@ router.get('/deadlines', authenticateToken, (req, res) => {
         let clientFilter = '';
         const params = [currentYear, currentMonth];
 
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
             clientFilter = `
                 AND c.id IN (
                     SELECT client_id FROM user_client_assignments WHERE user_id = ?
@@ -227,7 +227,12 @@ router.get('/deadlines', authenticateToken, (req, res) => {
             WHERE c.is_active = 1 
                 AND comp.is_active = 1
                 AND (comp.is_temporary = 0 OR (comp.is_temporary = 1 AND comp.temp_month = ${currentMonth} AND comp.temp_year = ${currentYear}))
-                AND (comp.frequency = 'monthly' OR (comp.frequency = 'yearly' AND comp.deadline_month = ${currentMonth}))
+                AND (
+                    comp.frequency = 'monthly' 
+                    OR (comp.frequency = 'yearly' AND comp.deadline_month = ${currentMonth})
+                    OR (comp.frequency = 'quarterly' AND ${currentMonth} IN (3, 6, 9, 12))
+                    OR (comp.frequency = 'half_yearly' AND ${currentMonth} IN (6, 12))
+                )
                 AND COALESCE(ccs.status, 'pending') = 'pending'
                 ${clientFilter}
         `).all(...params);
@@ -275,7 +280,7 @@ router.get('/summary', authenticateToken, (req, res) => {
         let clientFilter = '';
         const params = [periodYear, periodMonth];
 
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
             clientFilter = `WHERE c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)`;
             params.push(req.user.id);
         }
@@ -371,8 +376,8 @@ router.get('/calendar', authenticateToken, (req, res) => {
         if (client_id) {
             clientFilter = 'AND c.id = ?';
             params.push(parseInt(client_id));
-        } else if (req.user.role !== 'admin' && req.user.role !== 'manager') {
-            // Team members can only see assigned clients
+        } else if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
+            // Managers and Team members can only see assigned clients
             clientFilter = 'AND c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)';
             params.push(req.user.id);
         }
@@ -403,7 +408,12 @@ router.get('/calendar', authenticateToken, (req, res) => {
             WHERE c.is_active = 1 
                 AND comp.is_active = 1
                 AND (comp.is_temporary = 0 OR (comp.is_temporary = 1 AND comp.temp_month = ${periodMonth} AND comp.temp_year = ${periodYear}))
-                AND (comp.frequency = 'monthly' OR (comp.frequency = 'yearly' AND comp.deadline_month = ${periodMonth}))
+                AND (
+                    comp.frequency = 'monthly' 
+                    OR (comp.frequency = 'yearly' AND comp.deadline_month = ${periodMonth})
+                    OR (comp.frequency = 'quarterly' AND ${periodMonth} IN (3, 6, 9, 12))
+                    OR (comp.frequency = 'half_yearly' AND ${periodMonth} IN (6, 12))
+                )
                 ${clientFilter}
             ORDER BY COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day), c.name
         `).all(...params);

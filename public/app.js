@@ -931,6 +931,24 @@ async function loadClients() {
     }
 }
 
+// Helper function to filter user dropdown by search text
+function filterUserOptions(searchText, selectName) {
+    const select = document.querySelector(`select[name="${selectName}"]`);
+    if (!select) return;
+
+    const searchLower = searchText.toLowerCase();
+    const options = select.querySelectorAll('option');
+
+    options.forEach(option => {
+        const name = option.getAttribute('data-name') || option.textContent.toLowerCase();
+        if (searchLower === '' || name.includes(searchLower)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
+}
+
 function showAddClientModal() {
     document.getElementById('modalTitle').textContent = 'Add New Client';
     document.getElementById('modalBody').innerHTML = `
@@ -954,10 +972,11 @@ function showAddClientModal() {
             </div>
             <div class="form-group">
                 <label class="form-label">Assign to Users</label>
+                <input type="text" class="form-input" id="userSearchInput" placeholder="Type to search users..." style="margin-bottom: 0.5rem;" oninput="filterUserOptions(this.value, 'user_ids')">
                 <select class="form-select" name="user_ids" multiple style="height: 100px;">
-                    ${cachedUsers.map(u => `<option value="${u.id}">${u.name} (${u.role})</option>`).join('')}
+                    ${cachedUsers.map(u => `<option value="${u.id}" data-name="${u.name.toLowerCase()}">${u.name} (${u.role.replace('_', ' ')})</option>`).join('')}
                 </select>
-                <small style="color: var(--text-muted);">Hold Ctrl/Cmd to select multiple</small>
+                <small style="color: var(--text-muted);">Type to search, hold Ctrl/Cmd to select multiple</small>
             </div>
             <div class="form-group">
                 <label class="form-label">Applicable Law Groups</label>
@@ -1099,12 +1118,14 @@ async function loadLawGroups() {
                             <button class="btn btn-sm btn-secondary" onclick="addCompliance(${lg.id}, '${escapeHtml(lg.name)}')">
                                 + Add Compliance
                             </button>
+                            ${currentUser.role === 'admin' ? `
                             <button class="btn btn-sm btn-secondary" onclick="editLawGroup(${lg.id})">
                                 Edit
                             </button>
                             <button class="btn btn-sm btn-secondary" onclick="deleteLawGroup(${lg.id})" style="color: var(--urgency-overdue);">
                                 Delete
                             </button>
+                            ` : ''}
                         </div>
                     </div>
                     <div class="admin-card-body">
@@ -1271,6 +1292,7 @@ function addCompliance(lawGroupId, lawGroupName) {
                 <select class="form-select" name="frequency" required>
                     <option value="monthly">Monthly</option>
                     <option value="quarterly">Quarterly</option>
+                    <option value="half_yearly">Half-Yearly</option>
                     <option value="yearly">Yearly</option>
                 </select>
             </div>
@@ -1347,6 +1369,7 @@ async function editCompliance(id) {
                     <select class="form-select" name="frequency" required>
                         <option value="monthly" ${compliance.frequency === 'monthly' ? 'selected' : ''}>Monthly</option>
                         <option value="quarterly" ${compliance.frequency === 'quarterly' ? 'selected' : ''}>Quarterly</option>
+                        <option value="half_yearly" ${compliance.frequency === 'half_yearly' ? 'selected' : ''}>Half-Yearly</option>
                         <option value="yearly" ${compliance.frequency === 'yearly' ? 'selected' : ''}>Yearly</option>
                     </select>
                 </div>
@@ -1698,6 +1721,7 @@ function showAddUserModal() {
                 <select class="form-select" name="role" required>
                     <option value="team_member">Team Member</option>
                     <option value="manager">Manager</option>
+                    <option value="associate_partner">Associate Partner</option>
                     <option value="admin">Admin</option>
                 </select>
             </div>
@@ -1754,6 +1778,7 @@ async function editUser(id) {
                     <select class="form-select" name="role" required ${isSelf ? 'disabled' : ''}>
                         <option value="team_member" ${user.role === 'team_member' ? 'selected' : ''}>Team Member</option>
                         <option value="manager" ${user.role === 'manager' ? 'selected' : ''}>Manager</option>
+                        <option value="associate_partner" ${user.role === 'associate_partner' ? 'selected' : ''}>Associate Partner</option>
                         <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
                     </select>
                     ${isSelf ? `<input type="hidden" name="role_original" value="${user.role}">` : ''}

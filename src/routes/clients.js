@@ -4,13 +4,13 @@ const { authenticateToken, requireManager } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all clients (filtered by user assignment for team members)
+// Get all clients (filtered by user assignment for team members AND managers)
 router.get('/', authenticateToken, (req, res) => {
     try {
         let clients;
 
-        if (req.user.role === 'admin' || req.user.role === 'manager') {
-            // Admins/Managers see all clients with assigned users and law groups
+        if (req.user.role === 'admin' || req.user.role === 'associate_partner') {
+            // Admins/Associate Partners see all clients with assigned users and law groups
             clients = db.prepare(`
                 SELECT c.*, 
                     GROUP_CONCAT(DISTINCT u.name) as assigned_users,
@@ -25,12 +25,18 @@ router.get('/', authenticateToken, (req, res) => {
                 ORDER BY c.name
             `).all();
         } else {
-            // Team members see only their assigned clients
+            // Managers and Team members see only their assigned clients
             clients = db.prepare(`
-                SELECT c.*
+                SELECT c.*,
+                    GROUP_CONCAT(DISTINCT u.name) as assigned_users,
+                    GROUP_CONCAT(DISTINCT lg.name) as assigned_law_groups
                 FROM clients c
                 INNER JOIN user_client_assignments uca ON c.id = uca.client_id
+                LEFT JOIN users u ON uca.user_id = u.id
+                LEFT JOIN client_law_group_assignments clga ON c.id = clga.client_id
+                LEFT JOIN law_groups lg ON clga.law_group_id = lg.id
                 WHERE uca.user_id = ? AND c.is_active = 1
+                GROUP BY c.id
                 ORDER BY c.name
             `).all(req.user.id);
         }
@@ -51,8 +57,8 @@ router.get('/:id', authenticateToken, (req, res) => {
             return res.status(404).json({ error: 'Client not found' });
         }
 
-        // Check access for team members
-        if (req.user.role !== 'admin' && req.user.role !== 'manager') {
+        // Check access for team members and managers
+        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
             const hasAccess = db.prepare(`
                 SELECT 1 FROM user_client_assignments 
                 WHERE user_id = ? AND client_id = ?
