@@ -1,6 +1,6 @@
 /**
  * Database Migration Script for Compliance Tracker Improvements
- * Adds applicable_client_ids column and client_compliance_applicability table
+ * Adds associate_partner role, applicable_client_ids column, and client_compliance_applicability table
  * 
  * Usage: node src/db/migrate-improvements.js
  */
@@ -25,8 +25,38 @@ async function migrate() {
     const db = new SQL.Database(buffer);
 
     try {
-        // 1. Check if applicable_client_ids column exists
-        console.log('1. Checking for applicable_client_ids column...');
+        // 1. Recreate users table with new role constraint (SQLite limitation - cannot alter CHECK)
+        console.log('1. Updating users table to support associate_partner role...');
+
+        // Check if users_new already exists and drop it
+        db.run(`DROP TABLE IF EXISTS users_new`);
+
+        // Create new table with updated constraint including associate_partner
+        db.run(`
+            CREATE TABLE users_new (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                email TEXT UNIQUE NOT NULL,
+                password_hash TEXT NOT NULL,
+                role TEXT NOT NULL CHECK (role IN ('admin', 'manager', 'team_member', 'associate_partner')),
+                must_change_password INTEGER DEFAULT 1,
+                created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+            )
+        `);
+
+        // Copy data from old table
+        db.run(`
+            INSERT INTO users_new (id, name, email, password_hash, role, must_change_password, created_at)
+            SELECT id, name, email, password_hash, role, must_change_password, created_at FROM users
+        `);
+
+        // Drop old table and rename new
+        db.run(`DROP TABLE users`);
+        db.run(`ALTER TABLE users_new RENAME TO users`);
+        console.log('   Users table updated successfully');
+
+        // 2. Check if applicable_client_ids column exists
+        console.log('2. Checking for applicable_client_ids column...');
         const complianceInfo = db.exec("PRAGMA table_info(compliances)");
         const columns = complianceInfo[0]?.values || [];
         const hasApplicableClients = columns.some(col => col[1] === 'applicable_client_ids');
@@ -38,8 +68,8 @@ async function migrate() {
             console.log('   applicable_client_ids column already exists');
         }
 
-        // 2. Create client_compliance_applicability table
-        console.log('2. Creating client_compliance_applicability table...');
+        // 3. Create client_compliance_applicability table
+        console.log('3. Creating client_compliance_applicability table...');
         db.run(`
             CREATE TABLE IF NOT EXISTS client_compliance_applicability (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -52,8 +82,8 @@ async function migrate() {
             )
         `);
 
-        // 3. Create index for performance
-        console.log('3. Creating performance index...');
+        // 4. Create index for performance
+        console.log('4. Creating performance index...');
         db.run(`
             CREATE INDEX IF NOT EXISTS idx_client_compliance_applicability 
             ON client_compliance_applicability(compliance_id, client_id)
@@ -66,10 +96,9 @@ async function migrate() {
 
         console.log('\n✅ Migration completed successfully!');
         console.log('\nNew features available:');
-        console.log('- Associate Partner role (validation at app level)');
+        console.log('- Associate Partner role now supported');
         console.log('- Half-yearly frequency (validation at app level)');
         console.log('- Client-specific compliance applicability');
-        console.log('- Applicable client IDs for compliances');
 
     } catch (error) {
         console.error('Migration failed:', error);
