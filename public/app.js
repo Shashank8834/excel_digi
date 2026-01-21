@@ -47,7 +47,7 @@ function initializeUI() {
     if (currentUser.role === 'admin') {
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
         document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'block');
-    } else if (currentUser.role === 'manager') {
+    } else if (currentUser.role === 'manager' || currentUser.role === 'associate_partner') {
         document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'block');
     }
 
