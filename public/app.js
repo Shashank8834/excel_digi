@@ -1657,7 +1657,7 @@ async function loadUsers() {
     try {
         const users = await apiCall('/api/users');
         const isAdmin = currentUser.role === 'admin';
-        const isManager = currentUser.role === 'manager';
+        const isManager = currentUser.role === 'manager' || currentUser.role === 'associate_partner';
 
         document.getElementById('usersContent').innerHTML = `
             <table class="matrix-table">
