@@ -1306,6 +1306,23 @@ function addCompliance(lawGroupId, lawGroupName) {
             </div>
             <div class="form-group">
                 <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="is_temporary" style="width: auto;" onchange="document.getElementById('tempFields').style.display = this.checked ? 'block' : 'none'">
+                    <span class="form-label" style="margin: 0;">Is Temporary/One-Time</span>
+                </label>
+                <small style="color: var(--text-muted);">This compliance will only appear for a specific month</small>
+            </div>
+            <div id="tempFields" style="display: none; padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 1rem;">
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                    <label class="form-label">Applicable Month (1-12)</label>
+                    <input type="number" class="form-input" name="temp_month" min="1" max="12" placeholder="e.g., 1 for January">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Applicable Year</label>
+                    <input type="number" class="form-input" name="temp_year" min="2024" max="2030" placeholder="e.g., 2026">
+                </div>
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
                     <input type="checkbox" name="manager_only" style="width: auto;">
                     <span class="form-label" style="margin: 0;">Manager/Admin Only</span>
                 </label>
@@ -1331,6 +1348,9 @@ function addCompliance(lawGroupId, lawGroupName) {
             frequency: form.frequency.value,
             deadline_day: form.deadline_day.value ? parseInt(form.deadline_day.value) : null,
             deadline_month: form.deadline_month.value ? parseInt(form.deadline_month.value) : null,
+            is_temporary: form.is_temporary.checked,
+            temp_month: form.temp_month.value ? parseInt(form.temp_month.value) : null,
+            temp_year: form.temp_year.value ? parseInt(form.temp_year.value) : null,
             manager_only: form.manager_only.checked,
             instruction_video_url: form.instruction_video_url.value || null,
             instruction_text: form.instruction_text.value || null
