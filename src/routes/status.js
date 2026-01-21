@@ -53,6 +53,29 @@ router.get('/matrix', authenticateToken, (req, res) => {
             compliances: getCompliances.all(lg.id, periodMonth, periodYear)
         }));
 
+        // Get client-specific compliances (no law group) for this period
+        const clientSpecificCompliances = db.prepare(`
+            SELECT * FROM compliances 
+            WHERE law_group_id IS NULL AND is_active = 1
+            AND (
+                is_temporary = 0 
+                OR (is_temporary = 1 AND temp_month = ? AND temp_year = ?)
+            )
+            ORDER BY display_order, name
+        `).all(periodMonth, periodYear);
+
+        // Add client-specific as a special "law group" at the end if there are any
+        if (clientSpecificCompliances.length > 0) {
+            lawGroupsWithCompliances.push({
+                id: null,
+                name: 'Client-Specific Tasks',
+                description: 'One-time or client-specific compliances',
+                display_order: 9999,
+                manager_only: 0,
+                compliances: clientSpecificCompliances
+            });
+        }
+
         // Get all status entries for this period
         const statusEntries = db.prepare(`
             SELECT client_id, compliance_id, status, notes
@@ -90,6 +113,18 @@ router.get('/matrix', authenticateToken, (req, res) => {
 
             lawGroupsWithCompliances.forEach(lg => {
                 lg.compliances.forEach(comp => {
+                    // For client-specific compliances, check if applicable to this client
+                    if (comp.applicable_client_ids) {
+                        try {
+                            const applicableIds = JSON.parse(comp.applicable_client_ids);
+                            if (!applicableIds.includes(client.id)) {
+                                return; // Skip this compliance for this client
+                            }
+                        } catch (e) {
+                            // If parsing fails, show to all clients
+                        }
+                    }
+
                     const key = `${client.id}-${comp.id}`;
                     const statusEntry = statusMap[key];
                     row.statuses[comp.id] = statusEntry ? {
