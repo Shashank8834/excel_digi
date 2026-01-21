@@ -1,65 +1,80 @@
-// Migration script for adding associate_partner role and other schema updates
-const Database = require('better-sqlite3');
+/**
+ * Database Migration Script for Compliance Tracker Improvements
+ * Adds applicable_client_ids column and client_compliance_applicability table
+ * 
+ * Usage: node src/db/migrate-improvements.js
+ */
+
+const initSqlJs = require('sql.js');
 const path = require('path');
+const fs = require('fs');
 
-const dbPath = path.join(__dirname, 'tracker.db');
-const db = new Database(dbPath);
+const dbPath = process.env.DB_PATH || path.join(__dirname, '..', '..', 'data', 'tracker.db');
 
-console.log('Running migrations for compliance tracker improvements...');
+async function migrate() {
+    console.log('Running migrations for compliance tracker improvements...');
+    console.log('Database path:', dbPath);
 
-// SQLite doesn't allow altering CHECK constraints directly
-// We need to recreate tables with new constraints
-
-try {
-    db.exec('BEGIN TRANSACTION');
-
-    // 1. Add half_yearly to frequency options and make law_group_id nullable
-    // First check if columns exist
-    const complianceInfo = db.prepare("PRAGMA table_info(compliances)").all();
-    const hasApplicableClients = complianceInfo.some(col => col.name === 'applicable_client_ids');
-
-    if (!hasApplicableClients) {
-        console.log('Adding applicable_client_ids column to compliances...');
-        db.exec(`ALTER TABLE compliances ADD COLUMN applicable_client_ids TEXT`);
+    if (!fs.existsSync(dbPath)) {
+        console.error('Database file not found! Nothing to migrate.');
+        process.exit(1);
     }
 
-    // 2. Create client_compliance_applicability table for per-compliance client selection
-    console.log('Creating client_compliance_applicability table...');
-    db.exec(`
-        CREATE TABLE IF NOT EXISTS client_compliance_applicability (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            client_id INTEGER NOT NULL,
-            compliance_id INTEGER NOT NULL,
-            is_applicable INTEGER DEFAULT 1,
-            FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
-            FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE,
-            UNIQUE(client_id, compliance_id)
-        )
-    `);
+    const SQL = await initSqlJs();
+    const buffer = fs.readFileSync(dbPath);
+    const db = new SQL.Database(buffer);
 
-    // 3. Create index for performance
-    db.exec(`
-        CREATE INDEX IF NOT EXISTS idx_client_compliance_applicability 
-        ON client_compliance_applicability(compliance_id, client_id)
-    `);
+    try {
+        // 1. Check if applicable_client_ids column exists
+        console.log('1. Checking for applicable_client_ids column...');
+        const complianceInfo = db.exec("PRAGMA table_info(compliances)");
+        const columns = complianceInfo[0]?.values || [];
+        const hasApplicableClients = columns.some(col => col[1] === 'applicable_client_ids');
 
-    // Note: SQLite doesn't support changing CHECK constraints without recreating the table
-    // The role validation will be done at the application level
-    // The frequency validation will also be done at the application level
+        if (!hasApplicableClients) {
+            console.log('   Adding applicable_client_ids column to compliances...');
+            db.run(`ALTER TABLE compliances ADD COLUMN applicable_client_ids TEXT`);
+        } else {
+            console.log('   applicable_client_ids column already exists');
+        }
 
-    db.exec('COMMIT');
-    console.log('Migration completed successfully!');
-    console.log('');
-    console.log('New features available:');
-    console.log('- Associate Partner role (validate at app level)');
-    console.log('- Half-yearly frequency (validate at app level)');
-    console.log('- Client-specific compliance applicability');
-    console.log('- Applicable client IDs for compliances');
+        // 2. Create client_compliance_applicability table
+        console.log('2. Creating client_compliance_applicability table...');
+        db.run(`
+            CREATE TABLE IF NOT EXISTS client_compliance_applicability (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                client_id INTEGER NOT NULL,
+                compliance_id INTEGER NOT NULL,
+                is_applicable INTEGER DEFAULT 1,
+                FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+                FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE,
+                UNIQUE(client_id, compliance_id)
+            )
+        `);
 
-} catch (error) {
-    db.exec('ROLLBACK');
-    console.error('Migration failed:', error);
-    process.exit(1);
+        // 3. Create index for performance
+        console.log('3. Creating performance index...');
+        db.run(`
+            CREATE INDEX IF NOT EXISTS idx_client_compliance_applicability 
+            ON client_compliance_applicability(compliance_id, client_id)
+        `);
+
+        // Save the database
+        const data = db.export();
+        const outputBuffer = Buffer.from(data);
+        fs.writeFileSync(dbPath, outputBuffer);
+
+        console.log('\n✅ Migration completed successfully!');
+        console.log('\nNew features available:');
+        console.log('- Associate Partner role (validation at app level)');
+        console.log('- Half-yearly frequency (validation at app level)');
+        console.log('- Client-specific compliance applicability');
+        console.log('- Applicable client IDs for compliances');
+
+    } catch (error) {
+        console.error('Migration failed:', error);
+        process.exit(1);
+    }
 }
 
-db.close();
+migrate();
