@@ -243,12 +243,13 @@ router.get('/deadlines', authenticateToken, (req, res) => {
                 c.channel_mail,
                 comp.id as compliance_id,
                 comp.name as compliance_name,
+                comp.applicable_client_ids,
                 COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day) as deadline_day,
-                lg.name as law_group_name,
+                COALESCE(lg.name, 'Client-Specific Tasks') as law_group_name,
                 COALESCE(ccs.status, 'pending') as status
             FROM clients c
             CROSS JOIN compliances comp
-            INNER JOIN law_groups lg ON comp.law_group_id = lg.id
+            LEFT JOIN law_groups lg ON comp.law_group_id = lg.id
             LEFT JOIN client_compliance_status ccs 
                 ON c.id = ccs.client_id 
                 AND comp.id = ccs.compliance_id
@@ -272,8 +273,21 @@ router.get('/deadlines', authenticateToken, (req, res) => {
                 ${clientFilter}
         `).all(...params);
 
+        // Filter out client-specific compliances not applicable to this client
+        const filteredItems = pendingItems.filter(item => {
+            if (item.applicable_client_ids) {
+                try {
+                    const applicableIds = JSON.parse(item.applicable_client_ids);
+                    return applicableIds.includes(item.client_id);
+                } catch (e) {
+                    return true; // If parsing fails, include it
+                }
+            }
+            return true; // If no filter, include all
+        });
+
         // Calculate deadline status
-        const result = pendingItems.map(item => {
+        const result = filteredItems.map(item => {
             const daysUntilDeadline = item.deadline_day - currentDay;
             let urgency = 'normal';
 
@@ -424,12 +438,13 @@ router.get('/calendar', authenticateToken, (req, res) => {
                 c.channel_mail,
                 comp.id as compliance_id,
                 comp.name as compliance_name,
+                comp.applicable_client_ids,
                 COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day) as deadline_day,
-                lg.name as law_group_name,
+                COALESCE(lg.name, 'Client-Specific Tasks') as law_group_name,
                 COALESCE(ccs.status, 'pending') as status
             FROM clients c
             CROSS JOIN compliances comp
-            INNER JOIN law_groups lg ON comp.law_group_id = lg.id
+            LEFT JOIN law_groups lg ON comp.law_group_id = lg.id
             LEFT JOIN client_compliance_status ccs 
                 ON c.id = ccs.client_id 
                 AND comp.id = ccs.compliance_id
@@ -453,9 +468,22 @@ router.get('/calendar', authenticateToken, (req, res) => {
             ORDER BY COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day), c.name
         `).all(...params);
 
+        // Filter out client-specific compliances not applicable to this client
+        const filteredTasks = tasks.filter(task => {
+            if (task.applicable_client_ids) {
+                try {
+                    const applicableIds = JSON.parse(task.applicable_client_ids);
+                    return applicableIds.includes(task.client_id);
+                } catch (e) {
+                    return true; // If parsing fails, include it
+                }
+            }
+            return true; // If no filter, include all
+        });
+
         // Group by deadline day
         const tasksByDay = {};
-        tasks.forEach(task => {
+        filteredTasks.forEach(task => {
             const day = task.deadline_day || 1;
             if (!tasksByDay[day]) {
                 tasksByDay[day] = [];
