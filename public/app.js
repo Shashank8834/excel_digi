@@ -1118,7 +1118,7 @@ async function loadLawGroups() {
                             <button class="btn btn-sm btn-secondary" onclick="addCompliance(${lg.id}, '${escapeHtml(lg.name)}')">
                                 + Add Compliance
                             </button>
-                            ${currentUser.role === 'admin' ? `
+                            ${(currentUser.role === 'admin' || currentUser.role === 'associate_partner') ? `
                             <button class="btn btn-sm btn-secondary" onclick="editLawGroup(${lg.id})">
                                 Edit
                             </button>

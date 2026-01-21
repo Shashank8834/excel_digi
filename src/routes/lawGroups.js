@@ -1,6 +1,6 @@
 const express = require('express');
 const { db } = require('../db/database');
-const { authenticateToken, requireAdmin } = require('../middleware/auth');
+const { authenticateToken, requireAssociatePartner } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -52,8 +52,8 @@ router.get('/:id', authenticateToken, (req, res) => {
     }
 });
 
-// Create law group (admin only - affects all clients)
-router.post('/', authenticateToken, requireAdmin, (req, res) => {
+// Create law group (admin and associate partner only)
+router.post('/', authenticateToken, requireAssociatePartner, (req, res) => {
     try {
         const { name, description, display_order, manager_only } = req.body;
 
@@ -79,8 +79,8 @@ router.post('/', authenticateToken, requireAdmin, (req, res) => {
 });
 
 
-// Update law group (admin only - affects all clients)
-router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
+// Update law group (admin and associate partner only)
+router.put('/:id', authenticateToken, requireAssociatePartner, (req, res) => {
     try {
         const { name, description, display_order, manager_only } = req.body;
 
@@ -97,8 +97,8 @@ router.put('/:id', authenticateToken, requireAdmin, (req, res) => {
 });
 
 
-// Delete law group (admin only)
-router.delete('/:id', authenticateToken, requireAdmin, (req, res) => {
+// Delete law group (admin and associate partner only)
+router.delete('/:id', authenticateToken, requireAssociatePartner, (req, res) => {
     try {
         // Check if there are ACTIVE compliances under this law group
         const count = db.prepare(`
