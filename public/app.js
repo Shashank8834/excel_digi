@@ -1043,10 +1043,11 @@ async function editClient(id) {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Assign to Users</label>
+                    <input type="text" class="form-input" id="editUserSearchInput" placeholder="Type to search users..." style="margin-bottom: 0.5rem;" oninput="filterUserOptions(this.value, 'user_ids')">
                     <select class="form-select" name="user_ids" multiple style="height: 100px;">
-                        ${cachedUsers.map(u => `<option value="${u.id}" ${client.user_ids && client.user_ids.includes(u.id) ? 'selected' : ''}>${u.name} (${u.role})</option>`).join('')}
+                        ${cachedUsers.map(u => `<option value="${u.id}" data-name="${u.name.toLowerCase()}" ${client.user_ids && client.user_ids.includes(u.id) ? 'selected' : ''}>${u.name} (${u.role.replace('_', ' ')})</option>`).join('')}
                     </select>
-                    <small style="color: var(--text-muted);">Hold Ctrl/Cmd to select multiple</small>
+                    <small style="color: var(--text-muted);">Type to search, hold Ctrl/Cmd to select multiple</small>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Applicable Law Groups</label>
@@ -2327,20 +2328,49 @@ function getMonthName(month) {
 async function loadCalendar() {
     try {
         const clientSelect = document.getElementById('calendarClient');
-        // Preserve the current selection before repopulating
-        const currentSelection = clientSelect.value;
+        const managerSelect = document.getElementById('calendarManager');
 
-        // Only repopulate dropdown if it's empty (first load)
+        // Preserve current selections
+        const currentClientSelection = clientSelect.value;
+        const currentManagerSelection = managerSelect.value;
+
+        // Populate manager dropdown if empty (first load) - only for admin
+        if (managerSelect.options.length <= 1 && currentUser.role === 'admin') {
+            const users = await apiCall('/api/users');
+            const managers = users.filter(u => u.role === 'manager' || u.role === 'associate_partner');
+            managerSelect.innerHTML = '<option value="">All Managers</option>' +
+                managers.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
+            managerSelect.onchange = async () => {
+                // When manager changes, reset client dropdown and reload
+                clientSelect.innerHTML = '<option value="">All Clients</option>';
+                await loadCalendar();
+            };
+        } else if (currentUser.role !== 'admin') {
+            // Hide manager filter for non-admins
+            managerSelect.style.display = 'none';
+        }
+
+        // Restore manager selection
+        if (currentManagerSelection) {
+            managerSelect.value = currentManagerSelection;
+        }
+
+        // Only repopulate client dropdown if it's empty or manager changed
         if (clientSelect.options.length <= 1) {
-            const clients = await apiCall('/api/clients');
+            // Use manager_id query param for efficient filtering
+            const clientsUrl = currentUser.role === 'admin' && managerSelect.value
+                ? `/api/clients?manager_id=${managerSelect.value}`
+                : '/api/clients';
+            const clients = await apiCall(clientsUrl);
+
             clientSelect.innerHTML = '<option value="">All Clients</option>' +
                 clients.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('');
             clientSelect.onchange = loadCalendar;
         }
 
-        // Restore selection
-        if (currentSelection) {
-            clientSelect.value = currentSelection;
+        // Restore client selection
+        if (currentClientSelection) {
+            clientSelect.value = currentClientSelection;
         }
 
         // Update month label

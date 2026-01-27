@@ -53,7 +53,7 @@ router.get('/:id', authenticateToken, (req, res) => {
     }
 });
 
-// Create compliance (manager only)
+// Create compliance (manager can only create temp, admin/associate_partner can create any)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
         const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, manager_only, instruction_video_url, instruction_text, is_temporary, temp_month, temp_year, applicable_client_ids } = req.body;
@@ -64,6 +64,26 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 
         if (!['monthly', 'quarterly', 'half_yearly', 'yearly'].includes(frequency)) {
             return res.status(400).json({ error: 'Frequency must be monthly, quarterly, half_yearly, or yearly' });
+        }
+
+        // Managers can only create temporary compliances
+        if (req.user.role === 'manager') {
+            if (!is_temporary) {
+                return res.status(403).json({ error: 'Managers can only create temporary compliances' });
+            }
+
+            // Check if manager has access to any client with this law group
+            if (law_group_id) {
+                const hasAccess = db.prepare(`
+                    SELECT 1 FROM user_client_assignments uca
+                    JOIN client_law_group_assignments clga ON uca.client_id = clga.client_id
+                    WHERE uca.user_id = ? AND clga.law_group_id = ?
+                `).get(req.user.id, law_group_id);
+
+                if (!hasAccess) {
+                    return res.status(403).json({ error: 'You do not have access to this law group' });
+                }
+            }
         }
 
         const result = db.prepare(`
@@ -82,10 +102,36 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 });
 
 
-// Update compliance (manager only)
+// Update compliance (manager can only update temp, admin/associate_partner can update any)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
         const { law_group_id, name, description, deadline_day, deadline_month, frequency, display_order, is_active, manager_only, instruction_video_url, instruction_text } = req.body;
+
+        // Check if manager is trying to edit a non-temp compliance
+        if (req.user.role === 'manager') {
+            const compliance = db.prepare('SELECT is_temporary, law_group_id FROM compliances WHERE id = ?').get(req.params.id);
+
+            if (!compliance) {
+                return res.status(404).json({ error: 'Compliance not found' });
+            }
+
+            if (!compliance.is_temporary) {
+                return res.status(403).json({ error: 'Managers can only edit temporary compliances' });
+            }
+
+            // Check if manager has access to this law group
+            if (compliance.law_group_id) {
+                const hasAccess = db.prepare(`
+                    SELECT 1 FROM user_client_assignments uca
+                    JOIN client_law_group_assignments clga ON uca.client_id = clga.client_id
+                    WHERE uca.user_id = ? AND clga.law_group_id = ?
+                `).get(req.user.id, compliance.law_group_id);
+
+                if (!hasAccess) {
+                    return res.status(403).json({ error: 'You do not have access to this compliance' });
+                }
+            }
+        }
 
         db.prepare(`
             UPDATE compliances 
@@ -103,9 +149,35 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
     }
 });
 
-// Delete compliance (manager only - soft delete)
+// Delete compliance (manager can only delete temp, admin/associate_partner can delete any - soft delete)
 router.delete('/:id', authenticateToken, requireManager, (req, res) => {
     try {
+        // Check if manager is trying to delete a non-temp compliance
+        if (req.user.role === 'manager') {
+            const compliance = db.prepare('SELECT is_temporary, law_group_id FROM compliances WHERE id = ?').get(req.params.id);
+
+            if (!compliance) {
+                return res.status(404).json({ error: 'Compliance not found' });
+            }
+
+            if (!compliance.is_temporary) {
+                return res.status(403).json({ error: 'Managers can only delete temporary compliances' });
+            }
+
+            // Check if manager has access to this law group
+            if (compliance.law_group_id) {
+                const hasAccess = db.prepare(`
+                    SELECT 1 FROM user_client_assignments uca
+                    JOIN client_law_group_assignments clga ON uca.client_id = clga.client_id
+                    WHERE uca.user_id = ? AND clga.law_group_id = ?
+                `).get(req.user.id, compliance.law_group_id);
+
+                if (!hasAccess) {
+                    return res.status(403).json({ error: 'You do not have access to this compliance' });
+                }
+            }
+        }
+
         db.prepare('UPDATE compliances SET is_active = 0 WHERE id = ?').run(req.params.id);
         res.json({ message: 'Compliance deactivated successfully' });
     } catch (error) {

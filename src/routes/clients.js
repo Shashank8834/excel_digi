@@ -4,28 +4,46 @@ const { authenticateToken, requireManager } = require('../middleware/auth');
 
 const router = express.Router();
 
-// Get all clients (filtered by user assignment for team members AND managers)
+// Get all clients (filtered by user assignment for team members, managers, AND associate partners)
 router.get('/', authenticateToken, (req, res) => {
     try {
         let clients;
+        const { manager_id } = req.query; // Optional filter by manager (admin only)
 
-        if (req.user.role === 'admin' || req.user.role === 'associate_partner') {
-            // Admins/Associate Partners see all clients with assigned users and law groups
-            clients = db.prepare(`
-                SELECT c.*, 
-                    GROUP_CONCAT(DISTINCT u.name) as assigned_users,
-                    GROUP_CONCAT(DISTINCT lg.name) as assigned_law_groups
-                FROM clients c
-                LEFT JOIN user_client_assignments uca ON c.id = uca.client_id
-                LEFT JOIN users u ON uca.user_id = u.id
-                LEFT JOIN client_law_group_assignments clga ON c.id = clga.client_id
-                LEFT JOIN law_groups lg ON clga.law_group_id = lg.id
-                WHERE c.is_active = 1
-                GROUP BY c.id
-                ORDER BY c.name
-            `).all();
+        if (req.user.role === 'admin') {
+            if (manager_id) {
+                // Admin filtering by specific manager's clients
+                clients = db.prepare(`
+                    SELECT c.*, 
+                        GROUP_CONCAT(DISTINCT u.name) as assigned_users,
+                        GROUP_CONCAT(DISTINCT lg.name) as assigned_law_groups
+                    FROM clients c
+                    INNER JOIN user_client_assignments uca ON c.id = uca.client_id
+                    LEFT JOIN users u ON uca.user_id = u.id
+                    LEFT JOIN client_law_group_assignments clga ON c.id = clga.client_id
+                    LEFT JOIN law_groups lg ON clga.law_group_id = lg.id
+                    WHERE c.is_active = 1 AND uca.user_id = ?
+                    GROUP BY c.id
+                    ORDER BY c.name
+                `).all(manager_id);
+            } else {
+                // Only Admins see all clients with assigned users and law groups
+                clients = db.prepare(`
+                    SELECT c.*, 
+                        GROUP_CONCAT(DISTINCT u.name) as assigned_users,
+                        GROUP_CONCAT(DISTINCT lg.name) as assigned_law_groups
+                    FROM clients c
+                    LEFT JOIN user_client_assignments uca ON c.id = uca.client_id
+                    LEFT JOIN users u ON uca.user_id = u.id
+                    LEFT JOIN client_law_group_assignments clga ON c.id = clga.client_id
+                    LEFT JOIN law_groups lg ON clga.law_group_id = lg.id
+                    WHERE c.is_active = 1
+                    GROUP BY c.id
+                    ORDER BY c.name
+                `).all();
+            }
         } else {
-            // Managers and Team members see only their assigned clients
+            // Associate partners, Managers and Team members see only their assigned clients
             clients = db.prepare(`
                 SELECT c.*,
                     GROUP_CONCAT(DISTINCT u.name) as assigned_users,
@@ -57,8 +75,8 @@ router.get('/:id', authenticateToken, (req, res) => {
             return res.status(404).json({ error: 'Client not found' });
         }
 
-        // Check access for team members and managers
-        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
+        // Check access for team members, managers, and associate partners
+        if (req.user.role !== 'admin') {
             const hasAccess = db.prepare(`
                 SELECT 1 FROM user_client_assignments 
                 WHERE user_id = ? AND client_id = ?

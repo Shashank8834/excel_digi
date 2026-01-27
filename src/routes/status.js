@@ -13,8 +13,8 @@ router.get('/matrix', authenticateToken, (req, res) => {
 
         // Get clients based on user role
         let clients;
-        if (req.user.role === 'admin' || req.user.role === 'associate_partner') {
-            // Admins/Associate Partners see all active clients
+        if (req.user.role === 'admin') {
+            // Only Admins see all active clients
             clients = db.prepare(`
                 SELECT c.id, c.name, c.industry
                 FROM clients c
@@ -22,7 +22,7 @@ router.get('/matrix', authenticateToken, (req, res) => {
                 ORDER BY c.name
             `).all();
         } else {
-            // Managers and Team members see only clients assigned to them
+            // Associate partners, Managers and Team members see only clients assigned to them
             clients = db.prepare(`
                 SELECT c.id, c.name, c.industry
                 FROM clients c
@@ -173,8 +173,8 @@ router.post('/update', authenticateToken, (req, res) => {
             return res.status(403).json({ error: 'Team members can only update status from the Calendar page' });
         }
 
-        // Check if team member or manager has access to this client
-        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
+        // Check if team member, manager, or associate partner has access to this client
+        if (req.user.role !== 'admin') {
             const hasAccess = db.prepare(`
                 SELECT 1 FROM user_client_assignments 
                 WHERE user_id = ? AND client_id = ?
@@ -227,7 +227,7 @@ router.get('/deadlines', authenticateToken, (req, res) => {
         let clientFilter = '';
         const params = [currentYear, currentMonth];
 
-        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
+        if (req.user.role !== 'admin') {
             clientFilter = `
                 AND c.id IN (
                     SELECT client_id FROM user_client_assignments WHERE user_id = ?
@@ -329,7 +329,7 @@ router.get('/summary', authenticateToken, (req, res) => {
         let clientFilter = '';
         const params = [periodYear, periodMonth];
 
-        if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
+        if (req.user.role !== 'admin') {
             clientFilter = `WHERE c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)`;
             params.push(req.user.id);
         }
@@ -425,8 +425,8 @@ router.get('/calendar', authenticateToken, (req, res) => {
         if (client_id) {
             clientFilter = 'AND c.id = ?';
             params.push(parseInt(client_id));
-        } else if (req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
-            // Managers and Team members can only see assigned clients
+        } else if (req.user.role !== 'admin') {
+            // Associate partners, Managers and Team members can only see assigned clients
             clientFilter = 'AND c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)';
             params.push(req.user.id);
         }
