@@ -122,7 +122,8 @@ async function loadInitialData() {
     try {
         // Load law groups for filter
         const lawGroupsRes = await apiCall('/api/law-groups');
-        cachedLawGroups = lawGroupsRes;
+        // Filter out virtual groups (like Client-Specific Tasks)
+        cachedLawGroups = lawGroupsRes.filter(lg => !lg.is_virtual && lg.id !== 0);
 
         const lawGroupSelect = document.getElementById('matrixLawGroup');
         lawGroupSelect.innerHTML = '<option value="">All Law Groups</option>' +
