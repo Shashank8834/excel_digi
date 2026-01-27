@@ -23,6 +23,24 @@ router.get('/', authenticateToken, (req, res) => {
             compliances: getCompliances.all(lg.id)
         }));
 
+        // Add client-specific tasks (compliances with no law_group_id)
+        const clientSpecificTasks = db.prepare(`
+            SELECT * FROM compliances 
+            WHERE law_group_id IS NULL AND is_active = 1
+            ORDER BY display_order, name
+        `).all();
+
+        if (clientSpecificTasks.length > 0) {
+            result.push({
+                id: 0,
+                name: 'Client-Specific Tasks',
+                description: 'Tasks assigned to specific clients',
+                display_order: 9999,
+                is_virtual: true,
+                compliances: clientSpecificTasks
+            });
+        }
+
         res.json(result);
     } catch (error) {
         console.error('Get law groups error:', error);

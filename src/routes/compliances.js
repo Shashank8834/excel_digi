@@ -84,6 +84,19 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
                     return res.status(403).json({ error: 'You do not have access to this law group' });
                 }
             }
+
+            // For client-specific tasks, validate manager has access to selected clients
+            if (applicable_client_ids && applicable_client_ids.length > 0) {
+                const managerClients = db.prepare(`
+                    SELECT client_id FROM user_client_assignments WHERE user_id = ?
+                `).all(req.user.id).map(r => r.client_id);
+
+                for (const clientId of applicable_client_ids) {
+                    if (!managerClients.includes(clientId)) {
+                        return res.status(403).json({ error: 'You do not have access to one or more selected clients' });
+                    }
+                }
+            }
         }
 
         const result = db.prepare(`

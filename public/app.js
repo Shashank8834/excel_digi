@@ -1149,15 +1149,18 @@ async function loadLawGroups() {
         let html = '<div class="admin-grid">';
 
         for (const lg of lawGroups) {
+            const isVirtualGroup = lg.is_virtual || lg.id === 0;
             html += `
                 <div class="admin-card">
                     <div class="admin-card-header">
                         <span class="admin-card-title">${escapeHtml(lg.name)}</span>
                         <div style="display: flex; gap: 0.5rem;">
+                            ${!isVirtualGroup ? `
                             <button class="btn btn-sm btn-secondary" onclick="addCompliance(${lg.id}, '${escapeHtml(lg.name)}')">
                                 + Add Compliance
                             </button>
-                            ${(currentUser.role === 'admin' || currentUser.role === 'associate_partner') ? `
+                            ` : ''}
+                            ${(!isVirtualGroup && (currentUser.role === 'admin' || currentUser.role === 'associate_partner')) ? `
                             <button class="btn btn-sm btn-secondary" onclick="editLawGroup(${lg.id})">
                                 Edit
                             </button>
