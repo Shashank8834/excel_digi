@@ -669,6 +669,13 @@ async function loadMatrix() {
             `;
 
             for (const comp of allCompliances) {
+                // Skip excluded compliances for this client
+                const excludedIds = row.excludedComplianceIds || [];
+                if (excludedIds.includes(comp.id)) {
+                    html += `<td class="status-cell compliance-excluded" style="background: var(--bg-tertiary); opacity: 0.5;" title="Excluded for this client">-</td>`;
+                    continue;
+                }
+
                 const status = row.statuses[comp.id] || { status: 'pending' };
                 const urgencyClass = getUrgencyClass(comp.deadline_day, status.status);
 

@@ -123,7 +123,8 @@ router.get('/matrix', authenticateToken, (req, res) => {
 
             const row = {
                 client,
-                statuses: {}
+                statuses: {},
+                excludedComplianceIds: Array.from(clientExcluded) // Include for frontend filtering
             };
 
             lawGroupsWithCompliances.forEach(lg => {
