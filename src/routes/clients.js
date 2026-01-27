@@ -124,11 +124,16 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create client (manager/admin only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, channel_mail, email_domain, user_ids, law_group_ids, excluded_compliance_ids } = req.body;
+        let { name, industry, notes, channel_mail, email_domain, user_ids, law_group_ids, excluded_compliance_ids } = req.body;
 
         if (!name) {
             return res.status(400).json({ error: 'Client name is required' });
         }
+
+        // Deduplicate arrays to prevent UNIQUE constraint errors
+        if (user_ids) user_ids = [...new Set(user_ids)];
+        if (law_group_ids) law_group_ids = [...new Set(law_group_ids)];
+        if (excluded_compliance_ids) excluded_compliance_ids = [...new Set(excluded_compliance_ids)];
 
         const result = db.prepare(`
             INSERT INTO clients (name, industry, notes, channel_mail, email_domain) VALUES (?, ?, ?, ?, ?)
@@ -181,7 +186,12 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 // Update client (manager/admin only)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, channel_mail, email_domain, is_active, user_ids, law_group_ids, excluded_compliance_ids } = req.body;
+        let { name, industry, notes, channel_mail, email_domain, is_active, user_ids, law_group_ids, excluded_compliance_ids } = req.body;
+
+        // Deduplicate arrays to prevent UNIQUE constraint errors
+        if (user_ids) user_ids = [...new Set(user_ids)];
+        if (law_group_ids) law_group_ids = [...new Set(law_group_ids)];
+        if (excluded_compliance_ids) excluded_compliance_ids = [...new Set(excluded_compliance_ids)];
 
         db.prepare(`
             UPDATE clients SET name = ?, industry = ?, notes = ?, channel_mail = ?, email_domain = ?, is_active = ?
