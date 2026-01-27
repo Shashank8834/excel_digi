@@ -12,7 +12,7 @@ router.get('/', authenticateToken, (req, res) => {
         let query = `
             SELECT c.*, lg.name as law_group_name
             FROM compliances c
-            INNER JOIN law_groups lg ON c.law_group_id = lg.id
+            LEFT JOIN law_groups lg ON c.law_group_id = lg.id
             WHERE c.is_active = 1
         `;
 
@@ -38,7 +38,7 @@ router.get('/:id', authenticateToken, (req, res) => {
         const compliance = db.prepare(`
             SELECT c.*, lg.name as law_group_name
             FROM compliances c
-            INNER JOIN law_groups lg ON c.law_group_id = lg.id
+            LEFT JOIN law_groups lg ON c.law_group_id = lg.id
             WHERE c.id = ?
         `).get(req.params.id);
 
