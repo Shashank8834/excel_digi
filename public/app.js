@@ -980,18 +980,40 @@ function showAddClientModal() {
             </div>
             <div class="form-group">
                 <label class="form-label">Assign to Users</label>
-                <input type="text" class="form-input" id="userSearchInput" placeholder="Type to search users..." style="margin-bottom: 0.5rem;" oninput="filterUserOptions(this.value, 'user_ids')">
-                <select class="form-select" name="user_ids" multiple style="height: 100px;">
-                    ${cachedUsers.map(u => `<option value="${u.id}" data-name="${u.name.toLowerCase()}">${u.name} (${u.role.replace('_', ' ')})</option>`).join('')}
-                </select>
-                <small style="color: var(--text-muted);">Type to search, hold Ctrl/Cmd to select multiple</small>
+                <input type="text" class="form-input" id="userSearchInput" placeholder="Type to search users..." style="margin-bottom: 0.5rem;" oninput="filterUserCheckboxes(this.value)">
+                <div id="userCheckboxList" style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.5rem;">
+                    ${cachedUsers.map(u => `
+                        <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem; cursor: pointer;" data-name="${u.name.toLowerCase()}">
+                            <input type="checkbox" name="user_${u.id}" value="${u.id}" style="width: auto;">
+                            <span>${escapeHtml(u.name)} <small style="color: var(--text-muted);">(${u.role.replace('_', ' ')})</small></span>
+                        </label>
+                    `).join('')}
+                </div>
             </div>
             <div class="form-group">
-                <label class="form-label">Applicable Law Groups</label>
-                <select class="form-select" name="law_group_ids" multiple style="height: 120px;">
-                    ${cachedLawGroups.map(lg => `<option value="${lg.id}">${lg.name}</option>`).join('')}
-                </select>
-                <small style="color: var(--text-muted);">Select which law groups apply to this client. If none selected, all apply.</small>
+                <label class="form-label">Applicable Compliances</label>
+                <small style="color: var(--text-muted); display: block; margin-bottom: 0.5rem;">All law groups are included by default. Expand to exclude specific compliances.</small>
+                <div id="lawGroupCheckboxList" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.5rem;">
+                    ${cachedLawGroups.map(lg => `
+                        <div class="law-group-item" style="margin-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                            <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                <input type="checkbox" id="lg_${lg.id}" name="lg_${lg.id}" checked style="width: auto;" onchange="toggleLawGroupCompliances(${lg.id}, this.checked)">
+                                <label for="lg_${lg.id}" style="flex: 1; cursor: pointer; font-weight: 600;">${escapeHtml(lg.name)}</label>
+                                <button type="button" class="btn btn-sm" onclick="toggleLawGroupExpand(${lg.id})" style="padding: 0.25rem 0.5rem;">
+                                    <span id="expand_${lg.id}">▶</span>
+                                </button>
+                            </div>
+                            <div id="compliances_${lg.id}" style="display: none; margin-left: 1.5rem; margin-top: 0.5rem;">
+                                ${lg.compliances && lg.compliances.length > 0 ? lg.compliances.map(c => `
+                                    <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem; cursor: pointer;">
+                                        <input type="checkbox" name="comp_${c.id}" value="${c.id}" checked style="width: auto;" data-lg="${lg.id}">
+                                        <span>${escapeHtml(c.name)}</span>
+                                    </label>
+                                `).join('') : '<span style="color: var(--text-muted); font-size: 0.85rem;">No compliances in this group</span>'}
+                            </div>
+                        </div>
+                    `).join('')}
+                </div>
             </div>
             <div class="form-group">
                 <label class="form-label">Notes</label>
@@ -1002,14 +1024,44 @@ function showAddClientModal() {
 
     document.getElementById('modalSubmit').onclick = async () => {
         const form = document.getElementById('clientForm');
+
+        // Collect user IDs from checkboxes
+        const userIds = [];
+        cachedUsers.forEach(u => {
+            const checkbox = form[`user_${u.id}`];
+            if (checkbox && checkbox.checked) userIds.push(u.id);
+        });
+
+        // Collect selected law group IDs
+        const lawGroupIds = [];
+        cachedLawGroups.forEach(lg => {
+            const checkbox = form[`lg_${lg.id}`];
+            if (checkbox && checkbox.checked) lawGroupIds.push(lg.id);
+        });
+
+        // Collect EXCLUDED compliance IDs (unchecked ones under checked law groups)
+        const excludedComplianceIds = [];
+        cachedLawGroups.forEach(lg => {
+            const lgCheckbox = form[`lg_${lg.id}`];
+            if (lgCheckbox && lgCheckbox.checked && lg.compliances) {
+                lg.compliances.forEach(c => {
+                    const compCheckbox = form[`comp_${c.id}`];
+                    if (compCheckbox && !compCheckbox.checked) {
+                        excludedComplianceIds.push(c.id);
+                    }
+                });
+            }
+        });
+
         const data = {
             name: form.name.value,
             industry: form.industry.value,
             channel_mail: form.channel_mail.value || null,
             email_domain: form.email_domain.value || null,
             notes: form.notes.value,
-            user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
-            law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
+            user_ids: userIds,
+            law_group_ids: lawGroupIds,
+            excluded_compliance_ids: excludedComplianceIds
         };
 
         try {
@@ -1025,9 +1077,42 @@ function showAddClientModal() {
     openModal();
 }
 
+// Helper functions for Add/Edit Client modal
+function filterUserCheckboxes(searchText) {
+    const container = document.getElementById('userCheckboxList');
+    if (!container) return;
+    const labels = container.querySelectorAll('label');
+    const searchLower = searchText.toLowerCase();
+    labels.forEach(label => {
+        const name = label.getAttribute('data-name') || '';
+        label.style.display = searchLower === '' || name.includes(searchLower) ? '' : 'none';
+    });
+}
+
+function toggleLawGroupExpand(lgId) {
+    const div = document.getElementById(`compliances_${lgId}`);
+    const icon = document.getElementById(`expand_${lgId}`);
+    if (div.style.display === 'none') {
+        div.style.display = 'block';
+        icon.textContent = '▼';
+    } else {
+        div.style.display = 'none';
+        icon.textContent = '▶';
+    }
+}
+
+function toggleLawGroupCompliances(lgId, checked) {
+    const div = document.getElementById(`compliances_${lgId}`);
+    const checkboxes = div.querySelectorAll('input[type="checkbox"]');
+    checkboxes.forEach(cb => cb.checked = checked);
+}
+
 async function editClient(id) {
     try {
         const client = await apiCall(`/api/clients/${id}`);
+        const excludedIds = client.excluded_compliance_ids || [];
+        const userIds = client.user_ids || [];
+        const lawGroupIds = client.law_group_ids || [];
 
         document.getElementById('modalTitle').textContent = 'Edit Client';
         document.getElementById('modalBody').innerHTML = `
@@ -1051,18 +1136,42 @@ async function editClient(id) {
                 </div>
                 <div class="form-group">
                     <label class="form-label">Assign to Users</label>
-                    <input type="text" class="form-input" id="editUserSearchInput" placeholder="Type to search users..." style="margin-bottom: 0.5rem;" oninput="filterUserOptions(this.value, 'user_ids')">
-                    <select class="form-select" name="user_ids" multiple style="height: 100px;">
-                        ${cachedUsers.map(u => `<option value="${u.id}" data-name="${u.name.toLowerCase()}" ${client.user_ids && client.user_ids.includes(u.id) ? 'selected' : ''}>${u.name} (${u.role.replace('_', ' ')})</option>`).join('')}
-                    </select>
-                    <small style="color: var(--text-muted);">Type to search, hold Ctrl/Cmd to select multiple</small>
+                    <input type="text" class="form-input" id="userSearchInput" placeholder="Type to search users..." style="margin-bottom: 0.5rem;" oninput="filterUserCheckboxes(this.value)">
+                    <div id="userCheckboxList" style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.5rem;">
+                        ${cachedUsers.map(u => `
+                            <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem; cursor: pointer;" data-name="${u.name.toLowerCase()}">
+                                <input type="checkbox" name="user_${u.id}" value="${u.id}" ${userIds.includes(u.id) ? 'checked' : ''} style="width: auto;">
+                                <span>${escapeHtml(u.name)} <small style="color: var(--text-muted);">(${u.role.replace('_', ' ')})</small></span>
+                            </label>
+                        `).join('')}
+                    </div>
                 </div>
                 <div class="form-group">
-                    <label class="form-label">Applicable Law Groups</label>
-                    <select class="form-select" name="law_group_ids" multiple style="height: 120px;">
-                        ${cachedLawGroups.map(lg => `<option value="${lg.id}" ${client.law_group_ids && client.law_group_ids.includes(lg.id) ? 'selected' : ''}>${lg.name}</option>`).join('')}
-                    </select>
-                    <small style="color: var(--text-muted);">Select which law groups apply to this client. If none selected, all apply.</small>
+                    <label class="form-label">Applicable Compliances</label>
+                    <small style="color: var(--text-muted); display: block; margin-bottom: 0.5rem;">All law groups are included by default. Expand to exclude specific compliances.</small>
+                    <div id="lawGroupCheckboxList" style="max-height: 300px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.5rem;">
+                        ${cachedLawGroups.map(lg => {
+            const lgChecked = lawGroupIds.length === 0 || lawGroupIds.includes(lg.id);
+            return `
+                            <div class="law-group-item" style="margin-bottom: 0.5rem; border-bottom: 1px solid var(--border-color); padding-bottom: 0.5rem;">
+                                <div style="display: flex; align-items: center; gap: 0.5rem;">
+                                    <input type="checkbox" id="lg_${lg.id}" name="lg_${lg.id}" ${lgChecked ? 'checked' : ''} style="width: auto;" onchange="toggleLawGroupCompliances(${lg.id}, this.checked)">
+                                    <label for="lg_${lg.id}" style="flex: 1; cursor: pointer; font-weight: 600;">${escapeHtml(lg.name)}</label>
+                                    <button type="button" class="btn btn-sm" onclick="toggleLawGroupExpand(${lg.id})" style="padding: 0.25rem 0.5rem;">
+                                        <span id="expand_${lg.id}">▶</span>
+                                    </button>
+                                </div>
+                                <div id="compliances_${lg.id}" style="display: none; margin-left: 1.5rem; margin-top: 0.5rem;">
+                                    ${lg.compliances && lg.compliances.length > 0 ? lg.compliances.map(c => `
+                                        <label style="display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem; cursor: pointer;">
+                                            <input type="checkbox" name="comp_${c.id}" value="${c.id}" ${!excludedIds.includes(c.id) ? 'checked' : ''} style="width: auto;" data-lg="${lg.id}">
+                                            <span>${escapeHtml(c.name)}</span>
+                                        </label>
+                                    `).join('') : '<span style="color: var(--text-muted); font-size: 0.85rem;">No compliances in this group</span>'}
+                                </div>
+                            </div>
+                        `}).join('')}
+                    </div>
                 </div>
                 <div class="form-group">
                     <label class="form-label">Notes</label>
@@ -1073,14 +1182,44 @@ async function editClient(id) {
 
         document.getElementById('modalSubmit').onclick = async () => {
             const form = document.getElementById('clientForm');
+
+            // Collect user IDs from checkboxes
+            const newUserIds = [];
+            cachedUsers.forEach(u => {
+                const checkbox = form[`user_${u.id}`];
+                if (checkbox && checkbox.checked) newUserIds.push(u.id);
+            });
+
+            // Collect selected law group IDs
+            const newLawGroupIds = [];
+            cachedLawGroups.forEach(lg => {
+                const checkbox = form[`lg_${lg.id}`];
+                if (checkbox && checkbox.checked) newLawGroupIds.push(lg.id);
+            });
+
+            // Collect EXCLUDED compliance IDs
+            const newExcludedComplianceIds = [];
+            cachedLawGroups.forEach(lg => {
+                const lgCheckbox = form[`lg_${lg.id}`];
+                if (lgCheckbox && lgCheckbox.checked && lg.compliances) {
+                    lg.compliances.forEach(c => {
+                        const compCheckbox = form[`comp_${c.id}`];
+                        if (compCheckbox && !compCheckbox.checked) {
+                            newExcludedComplianceIds.push(c.id);
+                        }
+                    });
+                }
+            });
+
             const data = {
                 name: form.name.value,
                 industry: form.industry.value,
                 channel_mail: form.channel_mail.value || null,
                 email_domain: form.email_domain.value || null,
                 notes: form.notes.value,
-                user_ids: Array.from(form.user_ids.selectedOptions).map(o => parseInt(o.value)),
-                law_group_ids: Array.from(form.law_group_ids.selectedOptions).map(o => parseInt(o.value))
+                user_ids: newUserIds,
+                law_group_ids: newLawGroupIds,
+                excluded_compliance_ids: newExcludedComplianceIds
             };
 
             try {

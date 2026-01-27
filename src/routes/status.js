@@ -101,10 +101,21 @@ router.get('/matrix', authenticateToken, (req, res) => {
             onedriveLinkMap[link.client_id] = link.onedrive_link;
         });
 
+        // Get excluded compliances for all clients
+        const excludedCompliances = db.prepare(`
+            SELECT client_id, compliance_id FROM client_excluded_compliances
+        `).all();
+        const excludedMap = {};
+        excludedCompliances.forEach(ec => {
+            if (!excludedMap[ec.client_id]) excludedMap[ec.client_id] = new Set();
+            excludedMap[ec.client_id].add(ec.compliance_id);
+        });
+
         // Build the matrix data
         const matrix = clients.map(client => {
             // Add OneDrive link to client object
             client.onedrive_link = onedriveLinkMap[client.id] || null;
+            const clientExcluded = excludedMap[client.id] || new Set();
 
             const row = {
                 client,
@@ -113,6 +124,11 @@ router.get('/matrix', authenticateToken, (req, res) => {
 
             lawGroupsWithCompliances.forEach(lg => {
                 lg.compliances.forEach(comp => {
+                    // Check if this compliance is excluded for this client
+                    if (clientExcluded.has(comp.id)) {
+                        return; // Skip excluded compliance
+                    }
+
                     // For client-specific compliances, check if applicable to this client
                     if (comp.applicable_client_ids) {
                         try {
@@ -273,8 +289,24 @@ router.get('/deadlines', authenticateToken, (req, res) => {
                 ${clientFilter}
         `).all(...params);
 
-        // Filter out client-specific compliances not applicable to this client
+        // Get excluded compliances
+        const excludedCompliances = db.prepare(`
+            SELECT client_id, compliance_id FROM client_excluded_compliances
+        `).all();
+        const excludedMap = {};
+        excludedCompliances.forEach(ec => {
+            if (!excludedMap[ec.client_id]) excludedMap[ec.client_id] = new Set();
+            excludedMap[ec.client_id].add(ec.compliance_id);
+        });
+
+        // Filter out client-specific compliances not applicable to this client AND excluded compliances
         const filteredItems = pendingItems.filter(item => {
+            // Check if excluded
+            const clientExcluded = excludedMap[item.client_id];
+            if (clientExcluded && clientExcluded.has(item.compliance_id)) {
+                return false;
+            }
+
             if (item.applicable_client_ids) {
                 try {
                     const applicableIds = JSON.parse(item.applicable_client_ids);
@@ -472,8 +504,24 @@ router.get('/calendar', authenticateToken, (req, res) => {
             ORDER BY COALESCE(dce.extension_day, mco.custom_deadline_day, comp.deadline_day), c.name
         `).all(...params);
 
-        // Filter out client-specific compliances not applicable to this client
+        // Get excluded compliances
+        const excludedCompliances = db.prepare(`
+            SELECT client_id, compliance_id FROM client_excluded_compliances
+        `).all();
+        const excludedMap = {};
+        excludedCompliances.forEach(ec => {
+            if (!excludedMap[ec.client_id]) excludedMap[ec.client_id] = new Set();
+            excludedMap[ec.client_id].add(ec.compliance_id);
+        });
+
+        // Filter out client-specific compliances not applicable to this client AND excluded compliances
         const filteredTasks = tasks.filter(task => {
+            // Check if excluded
+            const clientExcluded = excludedMap[task.client_id];
+            if (clientExcluded && clientExcluded.has(task.compliance_id)) {
+                return false;
+            }
+
             if (task.applicable_client_ids) {
                 try {
                     const applicableIds = JSON.parse(task.applicable_client_ids);

@@ -103,6 +103,13 @@ router.get('/:id', authenticateToken, (req, res) => {
         `).all(req.params.id);
         client.law_group_ids = lawGroups.map(lg => lg.id);
 
+        // Get excluded compliances
+        const excludedCompliances = db.prepare(`
+            SELECT compliance_id FROM client_excluded_compliances
+            WHERE client_id = ?
+        `).all(req.params.id);
+        client.excluded_compliance_ids = excludedCompliances.map(ec => ec.compliance_id);
+
         res.json(client);
     } catch (error) {
         console.error('Get client error:', error);
@@ -113,7 +120,7 @@ router.get('/:id', authenticateToken, (req, res) => {
 // Create client (manager/admin only)
 router.post('/', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, channel_mail, email_domain, user_ids, law_group_ids } = req.body;
+        const { name, industry, notes, channel_mail, email_domain, user_ids, law_group_ids, excluded_compliance_ids } = req.body;
 
         if (!name) {
             return res.status(400).json({ error: 'Client name is required' });
@@ -143,6 +150,16 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
             }
         }
 
+        // Save excluded compliances if specified
+        if (excluded_compliance_ids && excluded_compliance_ids.length > 0) {
+            const insertExcluded = db.prepare(`
+                INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
+            `);
+            for (const complianceId of excluded_compliance_ids) {
+                insertExcluded.run(result.lastInsertRowid, complianceId);
+            }
+        }
+
         res.status(201).json({
             id: result.lastInsertRowid,
             message: 'Client created successfully'
@@ -156,7 +173,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
 // Update client (manager/admin only)
 router.put('/:id', authenticateToken, requireManager, (req, res) => {
     try {
-        const { name, industry, notes, channel_mail, email_domain, is_active, user_ids, law_group_ids } = req.body;
+        const { name, industry, notes, channel_mail, email_domain, is_active, user_ids, law_group_ids, excluded_compliance_ids } = req.body;
 
         db.prepare(`
             UPDATE clients SET name = ?, industry = ?, notes = ?, channel_mail = ?, email_domain = ?, is_active = ?
@@ -184,6 +201,18 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
             `);
             for (const lawGroupId of law_group_ids) {
                 insertLawGroupAssignment.run(req.params.id, lawGroupId);
+            }
+        }
+
+        // Update excluded compliances if provided
+        if (excluded_compliance_ids !== undefined) {
+            db.prepare('DELETE FROM client_excluded_compliances WHERE client_id = ?').run(req.params.id);
+
+            const insertExcluded = db.prepare(`
+                INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
+            `);
+            for (const complianceId of excluded_compliance_ids) {
+                insertExcluded.run(req.params.id, complianceId);
             }
         }
 
