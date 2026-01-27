@@ -2536,9 +2536,14 @@ async function loadCalendar() {
             `${getMonthName(calendarMonth)} ${calendarYear}`;
 
         const selectedClient = clientSelect.value;
-        const calendarUrl = selectedClient
-            ? `/api/status/calendar?year=${calendarYear}&month=${calendarMonth}&client_id=${selectedClient}`
-            : `/api/status/calendar?year=${calendarYear}&month=${calendarMonth}`;
+        const selectedManager = managerSelect.value;
+
+        let calendarUrl = `/api/status/calendar?year=${calendarYear}&month=${calendarMonth}`;
+        if (selectedClient) {
+            calendarUrl += `&client_id=${selectedClient}`;
+        } else if (selectedManager && currentUser.role === 'admin') {
+            calendarUrl += `&manager_id=${selectedManager}`;
+        }
 
         const data = await apiCall(calendarUrl);
 

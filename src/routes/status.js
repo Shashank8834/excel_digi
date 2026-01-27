@@ -414,7 +414,7 @@ router.post('/extensions', authenticateToken, requireAdmin, (req, res) => {
 // Calendar data - get all tasks for a month with deadlines
 router.get('/calendar', authenticateToken, (req, res) => {
     try {
-        const { year, month, client_id } = req.query;
+        const { year, month, client_id, manager_id } = req.query;
         const periodYear = parseInt(year) || new Date().getFullYear();
         const periodMonth = parseInt(month) || new Date().getMonth() + 1;
 
@@ -425,6 +425,10 @@ router.get('/calendar', authenticateToken, (req, res) => {
         if (client_id) {
             clientFilter = 'AND c.id = ?';
             params.push(parseInt(client_id));
+        } else if (manager_id && req.user.role === 'admin') {
+            // Admin filtering by specific manager's clients
+            clientFilter = 'AND c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)';
+            params.push(parseInt(manager_id));
         } else if (req.user.role !== 'admin') {
             // Associate partners, Managers and Team members can only see assigned clients
             clientFilter = 'AND c.id IN (SELECT client_id FROM user_client_assignments WHERE user_id = ?)';
