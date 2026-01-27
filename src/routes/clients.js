@@ -103,12 +103,16 @@ router.get('/:id', authenticateToken, (req, res) => {
         `).all(req.params.id);
         client.law_group_ids = lawGroups.map(lg => lg.id);
 
-        // Get excluded compliances
-        const excludedCompliances = db.prepare(`
-            SELECT compliance_id FROM client_excluded_compliances
-            WHERE client_id = ?
-        `).all(req.params.id);
-        client.excluded_compliance_ids = excludedCompliances.map(ec => ec.compliance_id);
+        // Get excluded compliances (graceful if table doesn't exist)
+        try {
+            const excludedCompliances = db.prepare(`
+                SELECT compliance_id FROM client_excluded_compliances
+                WHERE client_id = ?
+            `).all(req.params.id);
+            client.excluded_compliance_ids = excludedCompliances.map(ec => ec.compliance_id);
+        } catch (e) {
+            client.excluded_compliance_ids = [];
+        }
 
         res.json(client);
     } catch (error) {
@@ -150,13 +154,17 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
             }
         }
 
-        // Save excluded compliances if specified
+        // Save excluded compliances if specified (graceful if table doesn't exist)
         if (excluded_compliance_ids && excluded_compliance_ids.length > 0) {
-            const insertExcluded = db.prepare(`
-                INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
-            `);
-            for (const complianceId of excluded_compliance_ids) {
-                insertExcluded.run(result.lastInsertRowid, complianceId);
+            try {
+                const insertExcluded = db.prepare(`
+                    INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
+                `);
+                for (const complianceId of excluded_compliance_ids) {
+                    insertExcluded.run(result.lastInsertRowid, complianceId);
+                }
+            } catch (e) {
+                // Table may not exist yet, ignore
             }
         }
 
@@ -204,15 +212,19 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
             }
         }
 
-        // Update excluded compliances if provided
+        // Update excluded compliances if provided (graceful if table doesn't exist)
         if (excluded_compliance_ids !== undefined) {
-            db.prepare('DELETE FROM client_excluded_compliances WHERE client_id = ?').run(req.params.id);
+            try {
+                db.prepare('DELETE FROM client_excluded_compliances WHERE client_id = ?').run(req.params.id);
 
-            const insertExcluded = db.prepare(`
-                INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
-            `);
-            for (const complianceId of excluded_compliance_ids) {
-                insertExcluded.run(req.params.id, complianceId);
+                const insertExcluded = db.prepare(`
+                    INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
+                `);
+                for (const complianceId of excluded_compliance_ids) {
+                    insertExcluded.run(req.params.id, complianceId);
+                }
+            } catch (e) {
+                // Table may not exist yet, ignore
             }
         }
 
