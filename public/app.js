@@ -7,6 +7,7 @@ let calendarYear = 2026;
 let calendarMonth = 1;
 let cachedLawGroups = [];
 let cachedUsers = [];
+let cachedClients = [];
 
 // ===== INITIALIZATION =====
 document.addEventListener('DOMContentLoaded', async () => {
@@ -131,6 +132,12 @@ async function loadInitialData() {
         if (currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'associate_partner') {
             const usersRes = await apiCall('/api/users');
             cachedUsers = usersRes;
+        }
+
+        // Load clients for client-specific tasks
+        if (currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'associate_partner') {
+            const clientsRes = await apiCall('/api/clients');
+            cachedClients = clientsRes;
         }
     } catch (error) {
         showToast('Failed to load initial data', 'error');
@@ -1108,6 +1115,37 @@ async function loadLawGroups() {
     try {
         const lawGroups = await apiCall('/api/law-groups');
 
+        // Render header buttons based on role
+        const headerActions = document.getElementById('lawGroupsHeaderActions');
+        let headerHtml = '';
+
+        // Add Law Group button - only for admin and associate_partner
+        if (currentUser.role === 'admin' || currentUser.role === 'associate_partner') {
+            headerHtml += `
+                <button class="btn btn-primary" onclick="showAddLawGroupModal()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add Law Group
+                </button>
+            `;
+        }
+
+        // Add Client-Specific Task button - for admin, associate_partner, and manager
+        if (currentUser.role === 'admin' || currentUser.role === 'associate_partner' || currentUser.role === 'manager') {
+            headerHtml += `
+                <button class="btn btn-secondary" onclick="showAddClientSpecificTaskModal()" style="margin-left: 0.5rem;">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Add Client-Specific Task
+                </button>
+            `;
+        }
+        headerActions.innerHTML = headerHtml;
+
         let html = '<div class="admin-grid">';
 
         for (const lg of lawGroups) {
@@ -1368,6 +1406,122 @@ function addCompliance(lawGroupId, lawGroupName) {
     };
 
     openModal();
+}
+
+// Add client-specific task (compliance without law group)
+function showAddClientSpecificTaskModal() {
+    document.getElementById('modalTitle').textContent = 'Add Client-Specific Task';
+    document.getElementById('modalBody').innerHTML = `
+        <form id="clientTaskForm">
+            <div class="form-group">
+                <label class="form-label">Task Name *</label>
+                <input type="text" class="form-input" name="name" placeholder="e.g., Annual Return Filing" required>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Description</label>
+                <textarea class="form-textarea" name="description" placeholder="What this task involves..."></textarea>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Frequency *</label>
+                <select class="form-select" name="frequency" required>
+                    <option value="monthly">Monthly</option>
+                    <option value="quarterly">Quarterly</option>
+                    <option value="half_yearly">Half-Yearly</option>
+                    <option value="yearly">Yearly</option>
+                </select>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Deadline Day (1-31)</label>
+                <input type="number" class="form-input" name="deadline_day" min="1" max="31" placeholder="e.g., 15">
+            </div>
+            <div class="form-group">
+                <label class="form-label">Deadline Month (1-12, for yearly tasks)</label>
+                <input type="number" class="form-input" name="deadline_month" min="1" max="12" placeholder="e.g., 3 for March">
+            </div>
+            <div class="form-group">
+                <label style="display: flex; align-items: center; gap: 0.5rem; cursor: pointer;">
+                    <input type="checkbox" name="is_temporary" style="width: auto;" checked onchange="document.getElementById('clientTempFields').style.display = this.checked ? 'block' : 'none'">
+                    <span class="form-label" style="margin: 0;">Is One-Time Task</span>
+                </label>
+                <small style="color: var(--text-muted);">This task will only appear for a specific month</small>
+            </div>
+            <div id="clientTempFields" style="padding: 1rem; background: var(--bg-tertiary); border-radius: var(--radius-md); margin-bottom: 1rem;">
+                <div class="form-group" style="margin-bottom: 0.5rem;">
+                    <label class="form-label">Applicable Month (1-12)</label>
+                    <input type="number" class="form-input" name="temp_month" min="1" max="12" value="${new Date().getMonth() + 1}" placeholder="e.g., 1 for January">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                    <label class="form-label">Applicable Year</label>
+                    <input type="number" class="form-input" name="temp_year" min="2024" max="2030" value="${new Date().getFullYear()}" placeholder="e.g., 2026">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Applicable Clients *</label>
+                <input type="text" class="form-input" placeholder="Type to search clients..." style="margin-bottom: 0.5rem;" oninput="filterClientOptions(this.value)">
+                <select class="form-select" name="client_ids" multiple style="height: 120px;" required>
+                    ${cachedClients.map(c => `<option value="${c.id}" data-name="${c.name.toLowerCase()}">${escapeHtml(c.name)}</option>`).join('')}
+                </select>
+                <small style="color: var(--text-muted);">Select which clients this task applies to. Hold Ctrl/Cmd to select multiple.</small>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Instruction Text</label>
+                <textarea class="form-textarea" name="instruction_text" placeholder="Step-by-step instructions..." rows="3"></textarea>
+            </div>
+        </form>
+    `;
+
+    document.getElementById('modalSubmit').onclick = async () => {
+        const form = document.getElementById('clientTaskForm');
+        const selectedClients = Array.from(form.client_ids.selectedOptions).map(o => parseInt(o.value));
+
+        if (selectedClients.length === 0) {
+            showToast('Please select at least one client', 'error');
+            return;
+        }
+
+        const data = {
+            law_group_id: null, // No law group for client-specific tasks
+            name: form.name.value,
+            description: form.description.value,
+            frequency: form.frequency.value,
+            deadline_day: form.deadline_day.value ? parseInt(form.deadline_day.value) : null,
+            deadline_month: form.deadline_month.value ? parseInt(form.deadline_month.value) : null,
+            is_temporary: form.is_temporary.checked,
+            temp_month: form.temp_month.value ? parseInt(form.temp_month.value) : null,
+            temp_year: form.temp_year.value ? parseInt(form.temp_year.value) : null,
+            manager_only: false,
+            instruction_text: form.instruction_text.value || null,
+            applicable_client_ids: selectedClients
+        };
+
+        try {
+            await apiCall('/api/compliances', { method: 'POST', body: JSON.stringify(data) });
+            showToast('Client-specific task created successfully', 'success');
+            closeModal();
+            loadLawGroups();
+        } catch (error) {
+            showToast(error.message, 'error');
+        }
+    };
+
+    openModal();
+}
+
+function filterClientOptions(searchText) {
+    const select = document.querySelector('select[name="client_ids"]');
+    if (!select) return;
+
+    const searchLower = searchText.toLowerCase();
+    const options = select.querySelectorAll('option');
+
+    options.forEach(option => {
+        const name = option.getAttribute('data-name') || option.textContent.toLowerCase();
+        if (searchLower === '' || name.includes(searchLower)) {
+            option.style.display = '';
+        } else {
+            option.style.display = 'none';
+        }
+    });
 }
 
 async function editCompliance(id) {
