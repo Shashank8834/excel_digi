@@ -115,19 +115,48 @@ router.get('/matrix', authenticateToken, (req, res) => {
             // Table may not exist yet, ignore
         }
 
+        // Get client law group assignments to filter which law groups apply to each client
+        const clientLawGroupAssignments = db.prepare(`
+            SELECT client_id, law_group_id FROM client_law_group_assignments
+        `).all();
+        const clientLawGroupMap = {};
+        clientLawGroupAssignments.forEach(cla => {
+            if (!clientLawGroupMap[cla.client_id]) clientLawGroupMap[cla.client_id] = new Set();
+            clientLawGroupMap[cla.client_id].add(cla.law_group_id);
+        });
+
         // Build the matrix data
         const matrix = clients.map(client => {
             // Add OneDrive link to client object
             client.onedrive_link = onedriveLinkMap[client.id] || null;
             const clientExcluded = excludedMap[client.id] || new Set();
+            const clientAssignedLawGroups = clientLawGroupMap[client.id];
+
+            // Compute skipped law group IDs for frontend
+            let skippedLawGroupIds = [];
+            if (clientAssignedLawGroups && clientAssignedLawGroups.size > 0) {
+                skippedLawGroupIds = lawGroupsWithCompliances
+                    .filter(lg => lg.id !== null && !clientAssignedLawGroups.has(lg.id))
+                    .map(lg => lg.id);
+            }
 
             const row = {
                 client,
                 statuses: {},
-                excludedComplianceIds: Array.from(clientExcluded) // Include for frontend filtering
+                excludedComplianceIds: Array.from(clientExcluded),
+                skippedLawGroupIds: skippedLawGroupIds
             };
 
             lawGroupsWithCompliances.forEach(lg => {
+                // Check if client has specific law groups assigned - if so, only show those
+                const clientAssignedLawGroups = clientLawGroupMap[client.id];
+                if (clientAssignedLawGroups && clientAssignedLawGroups.size > 0 && lg.id !== null) {
+                    // Client has specific law groups assigned, check if this one is included
+                    if (!clientAssignedLawGroups.has(lg.id)) {
+                        return; // Skip this entire law group for this client
+                    }
+                }
+
                 lg.compliances.forEach(comp => {
                     // Check if this compliance is excluded for this client
                     if (clientExcluded.has(comp.id)) {
@@ -308,12 +337,30 @@ router.get('/deadlines', authenticateToken, (req, res) => {
             // Table may not exist yet, ignore
         }
 
-        // Filter out client-specific compliances not applicable to this client AND excluded compliances
+        // Get client law group assignments
+        const clientLawGroupAssignments = db.prepare(`
+            SELECT client_id, law_group_id FROM client_law_group_assignments
+        `).all();
+        const clientLawGroupMap = {};
+        clientLawGroupAssignments.forEach(cla => {
+            if (!clientLawGroupMap[cla.client_id]) clientLawGroupMap[cla.client_id] = new Set();
+            clientLawGroupMap[cla.client_id].add(cla.law_group_id);
+        });
+
+        // Filter out client-specific compliances not applicable to this client AND excluded compliances AND unassigned law groups
         const filteredItems = pendingItems.filter(item => {
             // Check if excluded
             const clientExcluded = excludedMap[item.client_id];
             if (clientExcluded && clientExcluded.has(item.compliance_id)) {
                 return false;
+            }
+
+            // Check law group assignment - if client has specific law groups, only show those
+            const clientAssignedLawGroups = clientLawGroupMap[item.client_id];
+            if (clientAssignedLawGroups && clientAssignedLawGroups.size > 0 && item.law_group_id !== null) {
+                if (!clientAssignedLawGroups.has(item.law_group_id)) {
+                    return false; // Client doesn't have this law group assigned
+                }
             }
 
             if (item.applicable_client_ids) {
@@ -527,12 +574,30 @@ router.get('/calendar', authenticateToken, (req, res) => {
             // Table may not exist yet, ignore
         }
 
-        // Filter out client-specific compliances not applicable to this client AND excluded compliances
+        // Get client law group assignments
+        const clientLawGroupAssignments = db.prepare(`
+            SELECT client_id, law_group_id FROM client_law_group_assignments
+        `).all();
+        const clientLawGroupMap = {};
+        clientLawGroupAssignments.forEach(cla => {
+            if (!clientLawGroupMap[cla.client_id]) clientLawGroupMap[cla.client_id] = new Set();
+            clientLawGroupMap[cla.client_id].add(cla.law_group_id);
+        });
+
+        // Filter out client-specific compliances not applicable to this client AND excluded compliances AND unassigned law groups
         const filteredTasks = tasks.filter(task => {
             // Check if excluded
             const clientExcluded = excludedMap[task.client_id];
             if (clientExcluded && clientExcluded.has(task.compliance_id)) {
                 return false;
+            }
+
+            // Check law group assignment - if client has specific law groups, only show those
+            const clientAssignedLawGroups = clientLawGroupMap[task.client_id];
+            if (clientAssignedLawGroups && clientAssignedLawGroups.size > 0 && task.law_group_id !== null) {
+                if (!clientAssignedLawGroups.has(task.law_group_id)) {
+                    return false; // Client doesn't have this law group assigned
+                }
             }
 
             if (task.applicable_client_ids) {

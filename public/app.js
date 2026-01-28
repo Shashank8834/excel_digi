@@ -604,7 +604,7 @@ async function loadMatrix() {
         }
 
         // Calculate colspan for law groups
-        const allCompliances = lawGroups.flatMap(lg => lg.compliances.map(c => ({ ...c, lawGroupName: lg.name })));
+        const allCompliances = lawGroups.flatMap(lg => lg.compliances.map(c => ({ ...c, lawGroupName: lg.name, lawGroupId: lg.id })));
 
         if (allCompliances.length === 0) {
             document.getElementById('matrixContent').innerHTML = `
@@ -669,6 +669,13 @@ async function loadMatrix() {
             `;
 
             for (const comp of allCompliances) {
+                // Skip compliances from law groups not assigned to this client
+                const skippedLgIds = row.skippedLawGroupIds || [];
+                if (skippedLgIds.includes(comp.lawGroupId)) {
+                    html += `<td class="status-cell compliance-excluded" style="background: var(--bg-tertiary); opacity: 0.5;" title="Law group not assigned to this client">-</td>`;
+                    continue;
+                }
+
                 // Skip excluded compliances for this client
                 const excludedIds = row.excludedComplianceIds || [];
                 if (excludedIds.includes(comp.id)) {
