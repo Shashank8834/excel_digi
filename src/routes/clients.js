@@ -142,7 +142,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         // Assign to users if specified
         if (user_ids && user_ids.length > 0) {
             const insertAssignment = db.prepare(`
-                INSERT INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
+                INSERT OR IGNORE INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
             `);
             for (const userId of user_ids) {
                 insertAssignment.run(userId, result.lastInsertRowid);
@@ -152,7 +152,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         // Assign to law groups if specified
         if (law_group_ids && law_group_ids.length > 0) {
             const insertLawGroupAssignment = db.prepare(`
-                INSERT INTO client_law_group_assignments (client_id, law_group_id) VALUES (?, ?)
+                INSERT OR IGNORE INTO client_law_group_assignments (client_id, law_group_id) VALUES (?, ?)
             `);
             for (const lawGroupId of law_group_ids) {
                 insertLawGroupAssignment.run(result.lastInsertRowid, lawGroupId);
@@ -163,7 +163,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         if (excluded_compliance_ids && excluded_compliance_ids.length > 0) {
             try {
                 const insertExcluded = db.prepare(`
-                    INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
+                    INSERT OR IGNORE INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
                 `);
                 for (const complianceId of excluded_compliance_ids) {
                     insertExcluded.run(result.lastInsertRowid, complianceId);
@@ -203,7 +203,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
             db.prepare('DELETE FROM user_client_assignments WHERE client_id = ?').run(req.params.id);
 
             const insertAssignment = db.prepare(`
-                INSERT INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
+                INSERT OR IGNORE INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
             `);
             for (const userId of user_ids) {
                 insertAssignment.run(userId, req.params.id);
@@ -215,7 +215,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
             db.prepare('DELETE FROM client_law_group_assignments WHERE client_id = ?').run(req.params.id);
 
             const insertLawGroupAssignment = db.prepare(`
-                INSERT INTO client_law_group_assignments (client_id, law_group_id) VALUES (?, ?)
+                INSERT OR IGNORE INTO client_law_group_assignments (client_id, law_group_id) VALUES (?, ?)
             `);
             for (const lawGroupId of law_group_ids) {
                 insertLawGroupAssignment.run(req.params.id, lawGroupId);
@@ -228,7 +228,7 @@ router.put('/:id', authenticateToken, requireManager, (req, res) => {
                 db.prepare('DELETE FROM client_excluded_compliances WHERE client_id = ?').run(req.params.id);
 
                 const insertExcluded = db.prepare(`
-                    INSERT INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
+                    INSERT OR IGNORE INTO client_excluded_compliances (client_id, compliance_id) VALUES (?, ?)
                 `);
                 for (const complianceId of excluded_compliance_ids) {
                     insertExcluded.run(req.params.id, complianceId);
