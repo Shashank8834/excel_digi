@@ -585,10 +585,15 @@ router.get('/calendar', authenticateToken, (req, res) => {
         });
 
         // Filter out client-specific compliances not applicable to this client AND excluded compliances AND unassigned law groups
+        console.log('Calendar filter debug - excludedMap:', JSON.stringify(Object.fromEntries(Object.entries(excludedMap).map(([k, v]) => [k, Array.from(v)]))));
+        console.log('Calendar filter debug - clientLawGroupMap:', JSON.stringify(Object.fromEntries(Object.entries(clientLawGroupMap).map(([k, v]) => [k, Array.from(v)]))));
+        console.log('Calendar filter debug - total tasks before filter:', tasks.length);
+
         const filteredTasks = tasks.filter(task => {
             // Check if excluded
             const clientExcluded = excludedMap[task.client_id];
             if (clientExcluded && clientExcluded.has(task.compliance_id)) {
+                console.log(`Filtering out task: client=${task.client_id} comp=${task.compliance_id} (excluded)`);
                 return false;
             }
 
@@ -596,6 +601,7 @@ router.get('/calendar', authenticateToken, (req, res) => {
             const clientAssignedLawGroups = clientLawGroupMap[task.client_id];
             if (clientAssignedLawGroups && clientAssignedLawGroups.size > 0 && task.law_group_id !== null) {
                 if (!clientAssignedLawGroups.has(task.law_group_id)) {
+                    console.log(`Filtering out task: client=${task.client_id} comp=${task.compliance_id} lg=${task.law_group_id} (law group not assigned)`);
                     return false; // Client doesn't have this law group assigned
                 }
             }
@@ -610,6 +616,8 @@ router.get('/calendar', authenticateToken, (req, res) => {
             }
             return true; // If no filter, include all
         });
+
+        console.log('Calendar filter debug - tasks after filter:', filteredTasks.length);
 
         // Group by deadline day
         const tasksByDay = {};
