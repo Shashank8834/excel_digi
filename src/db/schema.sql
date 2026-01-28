@@ -64,6 +64,17 @@ CREATE TABLE IF NOT EXISTS client_law_group_assignments (
     UNIQUE(client_id, law_group_id)
 );
 
+-- Client excluded compliances (compliances to skip for specific clients)
+CREATE TABLE IF NOT EXISTS client_excluded_compliances (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    client_id INTEGER NOT NULL,
+    compliance_id INTEGER NOT NULL,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (client_id) REFERENCES clients(id) ON DELETE CASCADE,
+    FOREIGN KEY (compliance_id) REFERENCES compliances(id) ON DELETE CASCADE,
+    UNIQUE(client_id, compliance_id)
+);
+
 -- Compliances under Law Groups with deadline dates
 CREATE TABLE IF NOT EXISTS compliances (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
