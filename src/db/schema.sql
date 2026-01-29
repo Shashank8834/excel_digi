@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS client_excluded_compliances (
 -- Compliances under Law Groups with deadline dates
 CREATE TABLE IF NOT EXISTS compliances (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
-    law_group_id INTEGER NOT NULL,
+    law_group_id INTEGER, -- NULL for client-specific tasks
     name TEXT NOT NULL,
     description TEXT,
     deadline_day INTEGER, -- Day of month (1-31)
