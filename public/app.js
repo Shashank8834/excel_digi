@@ -683,6 +683,17 @@ async function loadMatrix() {
                     continue;
                 }
 
+                // Check if this is a client-specific task that doesn't apply to this client
+                if (comp.applicable_client_ids) {
+                    try {
+                        const applicableIds = JSON.parse(comp.applicable_client_ids);
+                        if (!applicableIds.includes(row.client.id)) {
+                            html += `<td class="status-cell compliance-excluded" style="background: var(--bg-tertiary); opacity: 0.5;" title="Not applicable to this client">-</td>`;
+                            continue;
+                        }
+                    } catch (e) { }
+                }
+
                 const status = row.statuses[comp.id] || { status: 'pending' };
                 const urgencyClass = getUrgencyClass(comp.deadline_day, status.status);
 
