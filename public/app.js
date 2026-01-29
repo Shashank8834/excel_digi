@@ -1629,11 +1629,16 @@ function showAddClientSpecificTaskModal() {
             </div>
             <div class="form-group">
                 <label class="form-label">Applicable Clients *</label>
-                <input type="text" class="form-input" placeholder="Type to search clients..." style="margin-bottom: 0.5rem;" oninput="filterClientOptions(this.value)">
-                <select class="form-select" name="client_ids" multiple style="height: 120px;" required>
-                    ${cachedClients.map(c => `<option value="${c.id}" data-name="${c.name.toLowerCase()}">${escapeHtml(c.name)}</option>`).join('')}
-                </select>
-                <small style="color: var(--text-muted);">Select which clients this task applies to. Hold Ctrl/Cmd to select multiple.</small>
+                <input type="text" class="form-input" placeholder="Type to search clients..." style="margin-bottom: 0.5rem;" oninput="filterClientCheckboxes(this.value)">
+                <div id="clientCheckboxList" style="max-height: 150px; overflow-y: auto; border: 1px solid var(--border-color); border-radius: var(--radius-md); padding: 0.5rem;">
+                    ${cachedClients.map(c => `
+                        <label class="client-checkbox-item" data-name="${c.name.toLowerCase()}" style="display: flex; align-items: center; gap: 0.5rem; padding: 0.25rem; cursor: pointer;">
+                            <input type="checkbox" name="client_${c.id}" value="${c.id}" style="width: auto;">
+                            <span>${escapeHtml(c.name)}</span>
+                        </label>
+                    `).join('')}
+                </div>
+                <small style="color: var(--text-muted);">Select which clients this task applies to.</small>
             </div>
             <div class="form-group">
                 <label class="form-label">Instruction Text</label>
@@ -1644,7 +1649,11 @@ function showAddClientSpecificTaskModal() {
 
     document.getElementById('modalSubmit').onclick = async () => {
         const form = document.getElementById('clientTaskForm');
-        const selectedClients = Array.from(form.client_ids.selectedOptions).map(o => parseInt(o.value));
+        const selectedClients = [];
+        cachedClients.forEach(c => {
+            const cb = form[`client_${c.id}`];
+            if (cb && cb.checked) selectedClients.push(c.id);
+        });
 
         if (selectedClients.length === 0) {
             showToast('Please select at least one client', 'error');
@@ -1692,6 +1701,23 @@ function filterClientOptions(searchText) {
             option.style.display = '';
         } else {
             option.style.display = 'none';
+        }
+    });
+}
+
+function filterClientCheckboxes(searchText) {
+    const container = document.getElementById('clientCheckboxList');
+    if (!container) return;
+
+    const searchLower = searchText.toLowerCase();
+    const items = container.querySelectorAll('.client-checkbox-item');
+
+    items.forEach(item => {
+        const name = item.getAttribute('data-name') || '';
+        if (searchLower === '' || name.includes(searchLower)) {
+            item.style.display = 'flex';
+        } else {
+            item.style.display = 'none';
         }
     });
 }
