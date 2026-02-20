@@ -140,7 +140,12 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         `).run(name, industry || null, notes || null, channel_mail || null, email_domain || null);
 
         // Assign to users if specified
-        if (user_ids && user_ids.length > 0) {
+        // Auto-include the creator so they don't lose access to their own client
+        if (!user_ids) user_ids = [];
+        if (req.user.role !== 'admin' && !user_ids.includes(req.user.id)) {
+            user_ids.push(req.user.id);
+        }
+        if (user_ids.length > 0) {
             const insertAssignment = db.prepare(`
                 INSERT OR IGNORE INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
             `);
