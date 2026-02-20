@@ -49,7 +49,7 @@ function initializeUI() {
     if (currentUser.role === 'admin') {
         document.querySelectorAll('.admin-only').forEach(el => el.style.display = 'block');
         document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'block');
-    } else if (currentUser.role === 'manager' || currentUser.role === 'associate_partner') {
+    } else if (currentUser.role === 'manager' || currentUser.role === 'associate_partner' || currentUser.role === 'partner') {
         document.querySelectorAll('.manager-only').forEach(el => el.style.display = 'block');
     }
 
@@ -131,13 +131,13 @@ async function loadInitialData() {
             cachedLawGroups.map(lg => `<option value="${lg.id}">${lg.name}</option>`).join('');
 
         // Load users for admin, manager, and associate_partner
-        if (currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'associate_partner') {
+        if (currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'associate_partner' || currentUser.role === 'partner') {
             const usersRes = await apiCall('/api/users');
             cachedUsers = usersRes;
         }
 
         // Load clients for client-specific tasks
-        if (currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'associate_partner') {
+        if (currentUser.role === 'admin' || currentUser.role === 'manager' || currentUser.role === 'associate_partner' || currentUser.role === 'partner') {
             const clientsRes = await apiCall('/api/clients');
             cachedClients = clientsRes;
         }
@@ -707,7 +707,7 @@ async function loadMatrix() {
                 // Check if client has OneDrive link for this month
                 const hasOnedriveLink = !!row.client.onedrive_link;
                 // Role check: only managers, associate partners, and admins can edit via matrix
-                const isManagerOrAdmin = currentUser.role === 'manager' || currentUser.role === 'admin' || currentUser.role === 'associate_partner';
+                const isManagerOrAdmin = currentUser.role === 'manager' || currentUser.role === 'admin' || currentUser.role === 'associate_partner' || currentUser.role === 'partner';
                 const canEdit = isEditable && hasOnedriveLink && isManagerOrAdmin;
 
 
@@ -1286,7 +1286,7 @@ async function loadLawGroups() {
         let headerHtml = '';
 
         // Add Law Group button - only for admin and associate_partner
-        if (currentUser.role === 'admin' || currentUser.role === 'associate_partner') {
+        if (currentUser.role === 'admin' || currentUser.role === 'associate_partner' || currentUser.role === 'partner') {
             headerHtml += `
                 <button class="btn btn-primary" onclick="showAddLawGroupModal()">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -1299,7 +1299,7 @@ async function loadLawGroups() {
         }
 
         // Add Client-Specific Task button - for admin, associate_partner, and manager
-        if (currentUser.role === 'admin' || currentUser.role === 'associate_partner' || currentUser.role === 'manager') {
+        if (currentUser.role === 'admin' || currentUser.role === 'associate_partner' || currentUser.role === 'partner' || currentUser.role === 'manager') {
             headerHtml += `
                 <button class="btn btn-secondary" onclick="showAddClientSpecificTaskModal()" style="margin-left: 0.5rem;">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" width="18" height="18">
@@ -1326,7 +1326,7 @@ async function loadLawGroups() {
                                 + Add Compliance
                             </button>
                             ` : ''}
-                            ${(!isVirtualGroup && (currentUser.role === 'admin' || currentUser.role === 'associate_partner')) ? `
+                            ${(!isVirtualGroup && (currentUser.role === 'admin' || currentUser.role === 'associate_partner' || currentUser.role === 'partner')) ? `
                             <button class="btn btn-sm btn-secondary" onclick="editLawGroup(${lg.id})">
                                 Edit
                             </button>
@@ -1339,7 +1339,7 @@ async function loadLawGroups() {
                     <div class="admin-card-body">
                         ${lg.compliances.length === 0 ? '<p style="color: var(--text-muted);">No compliances yet</p>' : ''}
                         ${lg.compliances.map(c => {
-                const canEditDelete = currentUser.role === 'admin' || currentUser.role === 'associate_partner' || (currentUser.role === 'manager' && c.is_temporary);
+                const canEditDelete = currentUser.role === 'admin' || currentUser.role === 'associate_partner' || currentUser.role === 'partner' || (currentUser.role === 'manager' && c.is_temporary);
                 return `
                             <div class="admin-list-item">
                                 <div class="admin-list-item-content">
@@ -2031,7 +2031,7 @@ async function loadUsers() {
     try {
         const users = await apiCall('/api/users');
         const isAdmin = currentUser.role === 'admin';
-        const isManager = currentUser.role === 'manager' || currentUser.role === 'associate_partner';
+        const isManager = currentUser.role === 'manager' || currentUser.role === 'associate_partner' || currentUser.role === 'partner';
 
         document.getElementById('usersContent').innerHTML = `
             <table class="matrix-table">
@@ -2096,6 +2096,7 @@ function showAddUserModal() {
                     <option value="team_member">Team Member</option>
                     <option value="manager">Manager</option>
                     <option value="associate_partner">Associate Partner</option>
+                    <option value="partner">Partner</option>
                     <option value="admin">Admin</option>
                 </select>
             </div>
@@ -2153,6 +2154,7 @@ async function editUser(id) {
                         <option value="team_member" ${user.role === 'team_member' ? 'selected' : ''}>Team Member</option>
                         <option value="manager" ${user.role === 'manager' ? 'selected' : ''}>Manager</option>
                         <option value="associate_partner" ${user.role === 'associate_partner' ? 'selected' : ''}>Associate Partner</option>
+                        <option value="partner" ${user.role === 'partner' ? 'selected' : ''}>Partner</option>
                         <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>Admin</option>
                     </select>
                     ${isSelf ? `<input type="hidden" name="role_original" value="${user.role}">` : ''}
@@ -2690,7 +2692,7 @@ async function loadCalendar() {
         // Populate manager dropdown if empty (first load) - only for admin
         if (managerSelect.options.length <= 1 && currentUser.role === 'admin') {
             const users = await apiCall('/api/users');
-            const managers = users.filter(u => u.role === 'manager' || u.role === 'associate_partner');
+            const managers = users.filter(u => u.role === 'manager' || u.role === 'associate_partner' || u.role === 'partner');
             managerSelect.innerHTML = '<option value="">All Managers</option>' +
                 managers.map(m => `<option value="${m.id}">${escapeHtml(m.name)}</option>`).join('');
             managerSelect.onchange = async () => {

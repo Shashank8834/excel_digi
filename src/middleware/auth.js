@@ -30,7 +30,7 @@ function requireAdmin(req, res, next) {
 
 // Middleware to require associate partner, manager or admin role
 function requireAssociatePartner(req, res, next) {
-    if (req.user.role !== 'associate_partner' && req.user.role !== 'manager' && req.user.role !== 'admin') {
+    if (req.user.role !== 'associate_partner' && req.user.role !== 'partner' && req.user.role !== 'manager' && req.user.role !== 'admin') {
         return res.status(403).json({ error: 'Associate Partner access required' });
     }
     next();
@@ -38,7 +38,7 @@ function requireAssociatePartner(req, res, next) {
 
 // Middleware to require manager, associate partner, or admin role
 function requireManager(req, res, next) {
-    if (req.user.role !== 'manager' && req.user.role !== 'admin' && req.user.role !== 'associate_partner') {
+    if (req.user.role !== 'manager' && req.user.role !== 'admin' && req.user.role !== 'associate_partner' && req.user.role !== 'partner') {
         return res.status(403).json({ error: 'Manager access required' });
     }
     next();
@@ -54,7 +54,7 @@ function canAccessClient(req, res, next) {
     }
 
     // Admins and associate partners can access all clients
-    if (req.user.role === 'admin' || req.user.role === 'associate_partner') {
+    if (req.user.role === 'admin' || req.user.role === 'associate_partner' || req.user.role === 'partner') {
         return next();
     }
 
