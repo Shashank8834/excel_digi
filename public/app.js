@@ -820,9 +820,21 @@ function getUrgencyClass(deadlineDay, status) {
     if (status !== 'pending') return '';
 
     const now = new Date();
-    if (now.getFullYear() !== currentYear || now.getMonth() + 1 !== currentMonth) return '';
-
+    const todayYear = now.getFullYear();
+    const todayMonth = now.getMonth() + 1;
     const currentDay = now.getDate();
+
+    // For past months, all pending items are overdue
+    if (currentYear < todayYear || (currentYear === todayYear && currentMonth < todayMonth)) {
+        return 'urgency-overdue';
+    }
+
+    // For future months, nothing is overdue yet
+    if (currentYear > todayYear || (currentYear === todayYear && currentMonth > todayMonth)) {
+        return '';
+    }
+
+    // Current month — compare by day
     const daysUntil = deadlineDay - currentDay;
 
     if (daysUntil < 0) return 'urgency-overdue';
@@ -2786,7 +2798,9 @@ function renderCalendarGrid(tasksByDay) {
         const pendingTasks = tasks.filter(t => t.status === 'pending');
         const doneTasks = tasks.filter(t => t.status === 'done');
         const isToday = isCurrentMonth && day === currentDay;
-        const isPast = isCurrentMonth && day < currentDay;
+        // Past month: all days are past. Current month: only days before today. Future month: nothing is past.
+        const isPastMonth = today.getFullYear() > calendarYear || (today.getFullYear() === calendarYear && today.getMonth() + 1 > calendarMonth);
+        const isPast = isPastMonth || (isCurrentMonth && day < currentDay);
 
         let cellClass = 'calendar-cell';
         if (isToday) cellClass += ' today';
@@ -2831,8 +2845,20 @@ function showDayTasks(day, event) {
             const today = new Date();
             const isOverdue = (task) => {
                 if (task.status !== 'pending') return false;
+                const now = new Date();
+                const todayYear = now.getFullYear();
+                const todayMonth = now.getMonth() + 1;
+                // Past month: all pending are overdue
+                if (calendarYear < todayYear || (calendarYear === todayYear && calendarMonth < todayMonth)) {
+                    return true;
+                }
+                // Future month: nothing is overdue
+                if (calendarYear > todayYear || (calendarYear === todayYear && calendarMonth > todayMonth)) {
+                    return false;
+                }
+                // Current month: compare by deadline day
                 const deadlineDate = new Date(calendarYear, calendarMonth - 1, task.deadline_day);
-                return today > deadlineDate;
+                return now > deadlineDate;
             };
 
             if (tasks.length === 0) {
