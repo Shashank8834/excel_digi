@@ -1,10 +1,11 @@
 // ===== GLOBAL STATE =====
 let currentUser = null;
 let currentPage = 'dashboard';
-let currentMonth = 1; // Start from January 2026
-let currentYear = 2026;
-let calendarYear = 2026;
-let calendarMonth = 1;
+const _now = new Date();
+let currentMonth = _now.getMonth() + 1; // Current month (1-12)
+let currentYear = _now.getFullYear();
+let calendarYear = _now.getFullYear();
+let calendarMonth = _now.getMonth() + 1;
 let cachedLawGroups = [];
 let cachedUsers = [];
 let cachedClients = [];
@@ -2914,22 +2915,14 @@ function nextMonth() {
     loadCalendar();
 }
 
-// Send overdue email via mailto link
+// Send overdue email via Outlook Web
 function sendOverdueEmail(channelMail, clientName, complianceName) {
     const subject = encodeURIComponent(`Overdue Compliance: ${complianceName} for ${clientName}`);
-    const body = encodeURIComponent(`Dear Team,
+    const body = encodeURIComponent(`Dear Team,\n\nThis is a reminder that the following compliance is overdue:\n\nClient: ${clientName}\nCompliance: ${complianceName}\nPeriod: ${getMonthName(calendarMonth)} ${calendarYear}\n\nPlease address this at your earliest convenience.\n\nBest regards`);
 
-This is a reminder that the following compliance is overdue:
-
-Client: ${clientName}
-Compliance: ${complianceName}
-Period: ${getMonthName(calendarMonth)} ${calendarYear}
-
-Please address this at your earliest convenience.
-
-Best regards`);
-
-    window.open(`mailto:${channelMail}?subject=${subject}&body=${body}`, '_blank');
+    // Open Outlook Web compose window
+    const outlookWebUrl = `https://outlook.office.com/mail/deeplink/compose?to=${encodeURIComponent(channelMail)}&subject=${subject}&body=${body}`;
+    window.open(outlookWebUrl, '_blank');
 }
 
 // Show instruction manual modal for a compliance
