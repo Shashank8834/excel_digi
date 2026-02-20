@@ -265,17 +265,25 @@ router.post('/update', authenticateToken, (req, res) => {
     }
 });
 
-// Get deadline warnings for current period
+// Get deadline warnings for selected period
 router.get('/deadlines', authenticateToken, (req, res) => {
     try {
         const now = new Date();
-        const currentYear = now.getFullYear();
-        const currentMonth = now.getMonth() + 1;
-        const currentDay = now.getDate();
+        const todayYear = now.getFullYear();
+        const todayMonth = now.getMonth() + 1;
+        const todayDay = now.getDate();
+
+        // Use query params if provided, otherwise default to current month
+        const periodYear = parseInt(req.query.year) || todayYear;
+        const periodMonth = parseInt(req.query.month) || todayMonth;
+
+        // Determine if viewing past, current, or future month
+        const isPastMonth = periodYear < todayYear || (periodYear === todayYear && periodMonth < todayMonth);
+        const isFutureMonth = periodYear > todayYear || (periodYear === todayYear && periodMonth > todayMonth);
 
         // Get all pending compliances for this month with their deadlines
         let clientFilter = '';
-        const params = [currentYear, currentMonth];
+        const params = [periodYear, periodMonth];
 
         if (req.user.role !== 'admin') {
             clientFilter = `
@@ -308,16 +316,16 @@ router.get('/deadlines', authenticateToken, (req, res) => {
             LEFT JOIN default_compliance_extensions dce ON comp.id = dce.compliance_id
             LEFT JOIN monthly_compliance_overrides mco 
                 ON comp.id = mco.compliance_id 
-                AND mco.period_year = ${currentYear}
-                AND mco.period_month = ${currentMonth}
+                AND mco.period_year = ${periodYear}
+                AND mco.period_month = ${periodMonth}
             WHERE c.is_active = 1 
                 AND comp.is_active = 1
-                AND (comp.is_temporary = 0 OR (comp.is_temporary = 1 AND comp.temp_month = ${currentMonth} AND comp.temp_year = ${currentYear}))
+                AND (comp.is_temporary = 0 OR (comp.is_temporary = 1 AND comp.temp_month = ${periodMonth} AND comp.temp_year = ${periodYear}))
                 AND (
                     comp.frequency = 'monthly' 
-                    OR (comp.frequency = 'yearly' AND comp.deadline_month = ${currentMonth})
-                    OR (comp.frequency = 'quarterly' AND ${currentMonth} IN (3, 6, 9, 12))
-                    OR (comp.frequency = 'half_yearly' AND ${currentMonth} IN (6, 12))
+                    OR (comp.frequency = 'yearly' AND comp.deadline_month = ${periodMonth})
+                    OR (comp.frequency = 'quarterly' AND ${periodMonth} IN (3, 6, 9, 12))
+                    OR (comp.frequency = 'half_yearly' AND ${periodMonth} IN (6, 12))
                 )
                 AND COALESCE(ccs.status, 'pending') = 'pending'
                 ${clientFilter}
@@ -376,17 +384,28 @@ router.get('/deadlines', authenticateToken, (req, res) => {
 
         // Calculate deadline status
         const result = filteredItems.map(item => {
-            const daysUntilDeadline = item.deadline_day - currentDay;
             let urgency = 'normal';
+            let daysUntilDeadline = item.deadline_day - todayDay;
 
-            if (daysUntilDeadline < 0) {
+            if (isPastMonth) {
+                // Past month: all pending are overdue
                 urgency = 'overdue';
-            } else if (daysUntilDeadline === 0) {
-                urgency = 'today';
-            } else if (daysUntilDeadline <= 2) {
-                urgency = 'warning';
-            } else if (daysUntilDeadline <= 7) {
-                urgency = 'upcoming';
+                daysUntilDeadline = -1;
+            } else if (isFutureMonth) {
+                // Future month: nothing is overdue yet
+                urgency = 'normal';
+                daysUntilDeadline = item.deadline_day;
+            } else {
+                // Current month: compare by day
+                if (daysUntilDeadline < 0) {
+                    urgency = 'overdue';
+                } else if (daysUntilDeadline === 0) {
+                    urgency = 'today';
+                } else if (daysUntilDeadline <= 2) {
+                    urgency = 'warning';
+                } else if (daysUntilDeadline <= 7) {
+                    urgency = 'upcoming';
+                }
             }
 
             return {

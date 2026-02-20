@@ -244,7 +244,7 @@ async function loadDashboard() {
         `;
 
         // Load all deadlines
-        const deadlines = await apiCall('/api/status/deadlines');
+        const deadlines = await apiCall(`/api/status/deadlines?year=${currentYear}&month=${currentMonth}`);
         const urgentItems = deadlines.filter(d => ['overdue', 'today', 'warning'].includes(d.urgency));
 
         if (urgentItems.length === 0) {
@@ -857,7 +857,7 @@ function getUrgencyText(urgencyClass) {
 // ===== DEADLINES PAGE =====
 async function loadDeadlines() {
     try {
-        const deadlines = await apiCall('/api/status/deadlines');
+        const deadlines = await apiCall(`/api/status/deadlines?year=${currentYear}&month=${currentMonth}`);
 
         if (deadlines.length === 0) {
             document.getElementById('deadlinesContent').innerHTML = `
