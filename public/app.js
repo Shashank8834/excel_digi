@@ -22,7 +22,24 @@ document.addEventListener('DOMContentLoaded', async () => {
     }
 
     try {
-        currentUser = JSON.parse(userStr);
+        // Verify token is still valid before showing any UI
+        const verifyRes = await fetch('/api/auth/me', {
+            headers: { 'Authorization': `Bearer ${token}` }
+        });
+
+        if (!verifyRes.ok) {
+            // Token expired or invalid — clear and redirect to login
+            localStorage.removeItem('token');
+            localStorage.removeItem('user');
+            window.location.href = '/login.html';
+            return;
+        }
+
+        // Update user data from server (in case role changed, etc.)
+        const freshUser = await verifyRes.json();
+        currentUser = freshUser;
+        localStorage.setItem('user', JSON.stringify(freshUser));
+
         initializeUI();
 
         // Check if user must change password on first login
@@ -35,7 +52,9 @@ document.addEventListener('DOMContentLoaded', async () => {
         navigateTo('dashboard');
     } catch (error) {
         console.error('Initialization error:', error);
-        logout();
+        localStorage.removeItem('token');
+        localStorage.removeItem('user');
+        window.location.href = '/login.html';
     }
 });
 

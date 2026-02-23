@@ -48,11 +48,14 @@ router.post('/login', (req, res) => {
 router.get('/me', authenticateToken, (req, res) => {
     try {
         const user = db.prepare(`
-            SELECT u.id, u.name, u.email, u.role, u.team_id, t.name as team_name
+            SELECT u.id, u.name, u.email, u.role, u.team_id, u.must_change_password, t.name as team_name
             FROM users u
             LEFT JOIN teams t ON u.team_id = t.id
             WHERE u.id = ?
         `).get(req.user.id);
+
+        // Convert must_change_password to boolean for frontend
+        user.must_change_password = user.must_change_password === 1;
 
         res.json(user);
     } catch (error) {
