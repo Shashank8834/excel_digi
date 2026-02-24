@@ -34,7 +34,6 @@ router.post('/login', (req, res) => {
                 name: user.name,
                 email: user.email,
                 role: user.role,
-                team_id: user.team_id,
                 must_change_password: user.must_change_password === 1
             }
         });
