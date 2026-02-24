@@ -42,10 +42,23 @@
     <div class="toast-container" id="toastContainer"></div>
 
     <script>
-        // Check if already logged in
-        const token = localStorage.getItem('token');
-        if (token) {
-            window.location.href = '/';
+        // Check if already logged in with a valid token
+        const existingToken = localStorage.getItem('token');
+        if (existingToken) {
+            fetch('/api/auth/me', {
+                headers: { 'Authorization': `Bearer ${existingToken}` }
+            }).then(res => {
+                if (res.ok) {
+                    window.location.href = '/';
+                } else {
+                    // Token is expired/invalid, clear it
+                    localStorage.removeItem('token');
+                    localStorage.removeItem('user');
+                }
+            }).catch(() => {
+                localStorage.removeItem('token');
+                localStorage.removeItem('user');
+            });
         }
 
         document.getElementById('loginForm').addEventListener('submit', async (e) => {
