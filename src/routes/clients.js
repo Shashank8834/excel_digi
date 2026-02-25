@@ -142,7 +142,7 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         // Assign to users if specified
         // Auto-include the creator so they don't lose access to their own client
         if (!user_ids) user_ids = [];
-        if (req.user.role !== 'admin' && !user_ids.includes(req.user.id)) {
+        if (!user_ids.includes(req.user.id)) {
             user_ids.push(req.user.id);
         }
         if (user_ids.length > 0) {
