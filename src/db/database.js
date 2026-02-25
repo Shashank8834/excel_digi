@@ -64,12 +64,11 @@ const dbWrapper = {
         return {
             run: function (...params) {
                 db.run(sql, params);
-                saveDatabase();
                 const result = db.exec('SELECT last_insert_rowid() as lastInsertRowid');
-                return {
-                    lastInsertRowid: result.length > 0 ? result[0].values[0][0] : 0,
-                    changes: db.getRowsModified()
-                };
+                const lastInsertRowid = result.length > 0 ? result[0].values[0][0] : 0;
+                const changes = db.getRowsModified();
+                saveDatabase();
+                return { lastInsertRowid, changes };
             },
             get: function (...params) {
                 const stmt = db.prepare(sql);

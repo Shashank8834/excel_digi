@@ -142,21 +142,15 @@ router.post('/', authenticateToken, requireManager, (req, res) => {
         // Assign to users if specified
         // Auto-include the creator so they don't lose access to their own client
         if (!user_ids) user_ids = [];
-        console.log('[CLIENT CREATE] Creator:', req.user.id, typeof req.user.id, 'Role:', req.user.role);
-        console.log('[CLIENT CREATE] user_ids from frontend:', JSON.stringify(user_ids), user_ids.map(id => typeof id));
         if (!user_ids.includes(req.user.id)) {
             user_ids.push(req.user.id);
         }
-        console.log('[CLIENT CREATE] user_ids after auto-include:', JSON.stringify(user_ids));
-        console.log('[CLIENT CREATE] New client ID:', result.lastInsertRowid, typeof result.lastInsertRowid);
         if (user_ids.length > 0) {
             const insertAssignment = db.prepare(`
                 INSERT OR IGNORE INTO user_client_assignments (user_id, client_id) VALUES (?, ?)
             `);
             for (const userId of user_ids) {
-                console.log('[CLIENT CREATE] Inserting assignment: userId=', userId, typeof userId, 'clientId=', result.lastInsertRowid, typeof result.lastInsertRowid);
-                const assignResult = insertAssignment.run(userId, result.lastInsertRowid);
-                console.log('[CLIENT CREATE] Assignment result: changes=', assignResult.changes);
+                insertAssignment.run(userId, result.lastInsertRowid);
             }
         }
 
